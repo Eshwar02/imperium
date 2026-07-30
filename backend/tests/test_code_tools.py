@@ -94,7 +94,7 @@ def test_code_agent_edits_on_isolated_branch(tmp_path, monkeypatch):
     # avoid importing heavy graph tools
     monkeypatch.setattr("imperium.agents.tools.build_tools", lambda ctx: [])
 
-    out = ca.CodeAgent().run_task(_ctx(tmp_path), "bump version to 2.0")
+    out = ca.CodeAgent().run_task(_ctx(tmp_path), "bump version to 2.0", plan=False)
 
     assert out["applied"] is True
     assert out["files_changed"] == ["app.py"]
@@ -102,3 +102,82 @@ def test_code_agent_edits_on_isolated_branch(tmp_path, monkeypatch):
     assert "2.0" in out["diff"]
     # default branch untouched
     assert repo.git.show(f"{default}:app.py").strip() == "VERSION = '1.0'"
+
+
+# ── run_tests tool + test loop ──────────────────────────────────────────────────
+
+def test_run_test_command_parses_pass_fail(tmp_path):
+    from imperium.agents.code_tools import run_test_command
+
+    (tmp_path / "ok.sh").write_text("echo '3 passed'\n")
+    res = run_test_command(str(tmp_path), "echo '3 passed'")
+    assert res["ok"] is True and res["passed"] == 3 and res["failed"] == 0
+
+    res = run_test_command(str(tmp_path), "echo '1 failed'; exit 1")
+    assert res["ok"] is False and res["failed"] == 1
+
+
+def test_run_tests_tool(tmp_path):
+    tool = _tool(_ctx(tmp_path), "run_tests")
+    assert "PASSED" in tool.invoke({"command": "echo '2 passed'"})
+    assert "FAILED" in tool.invoke({"command": "echo '1 failed'; exit 1"})
+
+
+def test_test_loop_iterates_until_pass(tmp_path, monkeypatch):
+    from imperium.agents import code_agent as ca
+    from imperium.agents import code_tools
+
+    # test fails once, then passes after one fix attempt
+    outcomes = iter([
+        {"ok": False, "exit_code": 1, "passed": 0, "failed": 1, "output": "boom"},
+        {"ok": True, "exit_code": 0, "passed": 1, "failed": 0, "output": "1 passed"},
+    ])
+    monkeypatch.setattr(code_tools, "run_test_command", lambda p, c: next(outcomes))
+    calls = []
+    monkeypatch.setattr("imperium.agents.agent_factory.run_agent", lambda a, m: calls.append(m))
+
+    result = ca.CodeAgent()._test_loop(_ctx(tmp_path), "AGENT", "pytest -q", max_iters=2)
+    assert result["passed"] is True
+    assert result["iterations"] == 1
+    assert len(result["attempts"]) == 2
+    assert len(calls) == 1  # one fix attempt
+
+
+# ── multi-file plan parsing ─────────────────────────────────────────────────────
+
+def test_parse_steps_extracts_json():
+    from imperium.agents.code_agent import CodeAgent
+
+    raw = 'Here is the plan:\n[{"file": "a.py", "action": "rename", "rationale": "x"}, {"nope": 1}]'
+    steps = CodeAgent()._parse_steps(raw)
+    assert steps == [{"file": "a.py", "action": "rename", "rationale": "x"}]
+    assert CodeAgent()._parse_steps("no json here") == []
+
+
+def test_with_plan_renders_steps():
+    from imperium.agents.code_agent import CodeAgent
+
+    steps = [{"file": "a.py", "action": "do X", "rationale": "why"}]
+    out = CodeAgent._with_plan("refactor", steps)
+    assert "refactor" in out and "1. [a.py] do X — why" in out
+    assert CodeAgent._with_plan("refactor", []) == "refactor"
+
+
+# ── live streaming events ───────────────────────────────────────────────────────
+
+def test_run_agent_stream_yields_events():
+    from imperium.agents.agent_factory import run_agent_stream
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    class FakeAgent:
+        def stream(self, _inp, stream_mode=None):
+            yield {"model": {"messages": [AIMessage(content="", tool_calls=[
+                {"name": "grep_code", "args": {"pattern": "x"}, "id": "1"}])]}}
+            yield {"tools": {"messages": [ToolMessage(content="a.py:1", name="grep_code", tool_call_id="1")]}}
+            yield {"model": {"messages": [AIMessage(content="Done editing.")]}}
+
+    events = list(run_agent_stream(FakeAgent(), "go"))
+    types = [e["type"] for e in events]
+    assert types == ["tool_call", "tool_result", "message", "final"]
+    assert events[0]["name"] == "grep_code" and events[0]["args"] == {"pattern": "x"}
+    assert events[-1]["text"] == "Done editing."

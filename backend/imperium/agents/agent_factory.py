@@ -47,20 +47,63 @@ def build_agent(
     )
 
 
+def _message_text(msg) -> str:
+    """Best-effort plain-text of a LangChain message across API versions."""
+    text = getattr(msg, "text", None)
+    if isinstance(text, str):  # `.text` property (current API)
+        return text
+    if callable(text):  # legacy `.text()` method
+        return text()
+    content = getattr(msg, "content", "")
+    return content if isinstance(content, str) else str(content)
+
+
 def run_agent(agent, user_message: str) -> str:
     """Invoke a built agent with a single user turn; return the final assistant text."""
     result = agent.invoke({"messages": [("user", user_message)]})
     messages = result.get("messages", [])
     if not messages:
         return ""
-    last = messages[-1]
-    text = getattr(last, "text", None)
-    if isinstance(text, str):  # `.text` property (current API)
-        return text
-    if callable(text):  # legacy `.text()` method
-        return text()
-    content = getattr(last, "content", "")
-    return content if isinstance(content, str) else str(content)
+    return _message_text(messages[-1])
+
+
+def _message_events(msg) -> list[dict]:
+    """Translate one streamed message into live events (tool calls / results / text)."""
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls:  # AI message that decided to call tools
+        return [
+            {"type": "tool_call", "name": tc.get("name", ""), "args": tc.get("args", {})}
+            for tc in tool_calls
+        ]
+    if msg.__class__.__name__ == "ToolMessage":  # a tool returned
+        return [{
+            "type": "tool_result",
+            "name": getattr(msg, "name", ""),
+            "content": _message_text(msg)[:2000],
+        }]
+    text = _message_text(msg)
+    return [{"type": "message", "text": text}] if text.strip() else []
+
+
+def run_agent_stream(agent, user_message: str):
+    """Stream a single agent turn, yielding events as tool calls and messages occur.
+
+    Events (dicts):
+      {"type": "tool_call",   "name", "args"}   — the model decided to call a tool
+      {"type": "tool_result", "name", "content"}— a tool returned
+      {"type": "message",     "text"}           — assistant text
+      {"type": "final",       "text"}           — the last assistant text (terminal)
+    """
+    final_text = ""
+    for chunk in agent.stream({"messages": [("user", user_message)]}, stream_mode="updates"):
+        for update in (chunk.values() if isinstance(chunk, dict) else []):
+            messages = update.get("messages", []) if isinstance(update, dict) else []
+            for msg in messages:
+                for ev in _message_events(msg):
+                    if ev["type"] == "message":
+                        final_text = ev["text"]
+                    yield ev
+    yield {"type": "final", "text": final_text}
 
 
 def run_tool_agent(

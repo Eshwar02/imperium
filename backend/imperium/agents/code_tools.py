@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import subprocess
 
 from langchain_core.tools import BaseTool, tool
 
@@ -24,6 +25,40 @@ _SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "b
 _SOURCE_EXTS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rb", ".java", ".rs", ".php", ".c", ".cpp", ".h", ".cs", ".md", ".txt", ".json", ".yaml", ".yml", ".toml"}
 _MAX_MATCHES = 100
 _MAX_READ_BYTES = 40_000
+_TEST_TIMEOUT = 300
+_DEFAULT_TEST_COMMAND = "pytest -q"
+
+
+def run_test_command(repo_path: str, command: str = _DEFAULT_TEST_COMMAND) -> dict:
+    """Run a shell test ``command`` inside ``repo_path`` and return a parsed result.
+
+    Returns ``{ok, exit_code, passed, failed, output}``. Never raises: a timeout or
+    startup failure degrades to a non-ok result so the caller (agent / test loop) can
+    read the output and react. Pass/fail counts reuse the pytest/jest parser from the
+    sandbox runner.
+    """
+    from imperium.sandbox.runner import parse_test_output
+
+    if not repo_path:
+        return {"ok": False, "exit_code": -1, "passed": 0, "failed": 0, "output": "No repository checked out."}
+    try:
+        proc = subprocess.run(
+            command, shell=True, cwd=repo_path,
+            capture_output=True, text=True, timeout=_TEST_TIMEOUT, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "exit_code": 124, "passed": 0, "failed": 0, "output": "timeout"}
+    except Exception as exc:  # noqa: BLE001 — command may be malformed / shell missing
+        return {"ok": False, "exit_code": -1, "passed": 0, "failed": 0, "output": str(exc)[:500]}
+    combined = f"{proc.stdout}\n{proc.stderr}"
+    passed, failed = parse_test_output(combined)
+    return {
+        "ok": proc.returncode == 0 and failed == 0,
+        "exit_code": proc.returncode,
+        "passed": passed,
+        "failed": failed,
+        "output": combined[-6000:],
+    }
 
 
 def _safe_path(repo_path: str, rel: str) -> str | None:
@@ -167,4 +202,20 @@ def build_code_tools(ctx: AgentContext) -> list[BaseTool]:
             return f"Could not write {relative_path}: {exc}"
         return f"Wrote {relative_path} ({len(content)} bytes)."
 
-    return [grep_code, find_definition, list_dir, read_file, edit_file, write_file]
+    @tool
+    def run_tests(command: str = _DEFAULT_TEST_COMMAND) -> str:
+        """Run the repository's test command to verify your changes. Defaults to `pytest -q`.
+
+        Use this after editing to confirm the change works and nothing regressed. Returns
+        PASSED/FAILED with pass/fail counts and the tail of the test output.
+        """
+        if not repo_path:
+            return "No repository checked out."
+        res = run_test_command(repo_path, command)
+        status = "PASSED" if res["ok"] else "FAILED"
+        return (
+            f"{status} (exit={res['exit_code']}, passed={res['passed']}, failed={res['failed']})\n"
+            + res["output"]
+        )
+
+    return [grep_code, find_definition, list_dir, read_file, edit_file, write_file, run_tests]
