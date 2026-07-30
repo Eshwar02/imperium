@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/imperium_lockup_horizontal.png" alt="Imperium — Enterprise Knowledge OS" width="520">
+</p>
+
 # Imperium
 
 Enterprise Knowledge Operating System (EKOS) — Phase 1 prototype foundation.
