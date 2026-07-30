@@ -20,6 +20,7 @@ ROUTING: dict[str, list[str]] = {
     "test_edgecase": ["nemotron"],                 # reason which edge cases matter
     "documentation": ["groq", "gemini"],
     "comprehension": ["cerebras"],
+    "healing": ["groq", "cerebras", "gemini"],  # fast, cheap diagnosis of system faults
 }
 
 

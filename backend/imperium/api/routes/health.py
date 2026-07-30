@@ -22,3 +22,11 @@ def health_services() -> dict[str, dict[str, str]]:
         "neo4j": graph.ping(),
         "redis": cache.ping(),
     }
+
+
+@router.get("/health/incidents")
+def health_incidents(limit: int = 100) -> dict:
+    """Operator-only view of recent self-healing incidents (not surfaced to end users)."""
+    from imperium.core.healing import get_incidents
+
+    return {"incidents": get_incidents(limit)}

@@ -236,13 +236,10 @@ class Orchestrator:
             return AnalysisResponse(repository_id=repository_id, status="queued")
 
     def _run_agent_safe(self, agent, ctx: AgentContext) -> dict:
-        try:
-            return agent.run(ctx)
-        except NotImplementedError:
-            return {}
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Agent %s raised: %s", agent.name, exc)
-            return {}
+        """Run an agent under the self-healing boundary (diagnose → remediate → retry)."""
+        from imperium.core.healing import heal_call
+
+        return heal_call(f"agent.{agent.name}", agent.run, ctx, default={}, retries=1)
 
     def _persist_findings(self, repository_id: str, findings: list[dict]) -> None:
         """Persist findings that represent business rules to RKB."""

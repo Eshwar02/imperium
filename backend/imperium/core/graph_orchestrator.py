@@ -74,12 +74,14 @@ def build_graph(steps: Steps | None = None, checkpointer: Any = None):
     steps = steps or Steps()
     checkpointer = checkpointer if checkpointer is not None else get_checkpointer()
 
+    from imperium.core.healing import heal_call
+
     def n_build_kb(state: RunState) -> dict:
-        kb = steps.build_kb(state)
+        kb = heal_call("pipeline.build_kb", steps.build_kb, state, default={})
         return {"kb": kb, "stage": "analyze", "progress": {"kb": "done"}}
 
     def n_analyze(state: RunState) -> dict:
-        out = steps.analyze(state)
+        out = heal_call("pipeline.analyze", steps.analyze, state, default={}) or {}
         return {
             "structure_map": out.get("structure_map", {}),
             "findings": out.get("findings", []),
@@ -100,7 +102,7 @@ def build_graph(steps: Steps | None = None, checkpointer: Any = None):
         return {"gate_a": votes, "approved_categories": approved, "stage": "simulate"}
 
     def n_simulate(state: RunState) -> dict:
-        sims = steps.simulate(state)
+        sims = heal_call("pipeline.simulate", steps.simulate, state, default=[]) or []
         return {
             "simulations": sims,
             "stage": "gate_b",
@@ -118,7 +120,7 @@ def build_graph(steps: Steps | None = None, checkpointer: Any = None):
         return {"gate_b": votes or {}, "stage": "finalize"}
 
     def n_finalize(state: RunState) -> dict:
-        docs = steps.finalize(state)
+        docs = heal_call("pipeline.finalize", steps.finalize, state, default={}) or {}
         return {
             "docs": docs,
             "stage": "complete",
