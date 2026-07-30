@@ -1,0 +1,444 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>How the Imperium Backend Works</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1f2328;
+    background: #ffffff;
+    padding: 32px 16px 48px;
+  }
+  .page { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 28px 0 10px; color: #1f2328; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }
+  h3 { font-size: 13px; font-weight: 700; margin: 14px 0 6px; color: #3b82d4; }
+  p { margin-bottom: 8px; color: #1f2328; }
+  code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 3px; padding: 1px 5px; }
+
+  /* Pipeline flow */
+  .pipeline { display: flex; flex-direction: column; gap: 0; margin: 16px 0; }
+  .stage {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+  }
+  .stage-num {
+    width: 32px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .num-circle {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #3b82d4;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .num-line {
+    width: 2px;
+    background: #e5e7eb;
+    flex: 1;
+    margin-top: 2px;
+  }
+  .stage:last-child .num-line { display: none; }
+  .stage-body {
+    flex: 1;
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-left: 10px;
+    margin-bottom: 10px;
+  }
+  .stage-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .stage-detail { color: #57606a; font-size: 12.5px; }
+  .tag {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-right: 4px;
+    margin-top: 4px;
+  }
+  .tag-pg  { background: #dbeafe; color: #1d4ed8; }
+  .tag-neo { background: #dcfce7; color: #166534; }
+  .tag-qd  { background: #fef9c3; color: #854d0e; }
+  .tag-llm { background: #fce7f3; color: #9d174d; }
+  .tag-bg  { background: #e5e7eb; color: #374151; }
+
+  /* Storage grid */
+  .store-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 14px 0; }
+  .store-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; background: #f7f8fa; }
+  .store-name { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .store-sub  { font-size: 11.5px; color: #57606a; margin-bottom: 6px; }
+  .store-list { font-size: 11.5px; color: #1f2328; }
+  .store-list li { list-style: none; padding: 1px 0; }
+  .store-list li::before { content: "·  "; color: #3b82d4; font-weight: 700; }
+
+  /* API table */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12.5px; }
+  th { background: #f7f8fa; border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; font-weight: 700; color: #57606a; }
+  td { border: 1px solid #e5e7eb; padding: 6px 10px; vertical-align: top; }
+  td:first-child { font-family: monospace; font-size: 11.5px; white-space: nowrap; }
+  .method { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-right: 4px; }
+  .get  { background: #dcfce7; color: #166534; }
+  .post { background: #dbeafe; color: #1d4ed8; }
+
+  /* Agent grid */
+  .agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  .agent-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; background: #f7f8fa; }
+  .agent-name { font-weight: 700; font-size: 12.5px; margin-bottom: 3px; }
+  .agent-model { font-size: 11px; color: #7c5cd8; font-weight: 600; margin-bottom: 4px; }
+  .agent-desc { font-size: 11.5px; color: #57606a; }
+
+  /* Rule box */
+  .rule-box { border-left: 3px solid #3b82d4; background: #f7f8fa; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 10px 0; font-size: 12.5px; }
+  .rule-box strong { display: block; margin-bottom: 2px; }
+
+  /* HITL flow */
+  .hitl { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
+  .hitl-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 5px; padding: 6px 10px; font-size: 12px; font-weight: 600; }
+  .hitl-arrow { color: #3b82d4; font-weight: 700; font-size: 14px; }
+
+  footer { margin-top: 48px; padding-top: 12px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #57606a; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>How the Imperium Backend Works</h1>
+  <p class="subtitle">A complete walkthrough — from a git URL to intelligence, transformations, and HITL approval gates.</p>
+
+  
+  <h2>1 · The Big Picture</h2>
+  <p>
+    The backend is a <strong>FastAPI application</strong> that wraps a <strong>multi-agent intelligence pipeline</strong>.
+    You give it a git repository. It clones it, builds a knowledge base across three stores,
+    runs specialist AI agents in parallel, extracts business rules, simulates transformations,
+    and then asks humans to approve changes through two gates before anything is committed.
+  </p>
+  <p>
+    Everything flows through one entry point — the <code>Orchestrator</code> — which sequences
+    the agents, enforces the approval gates, and writes every decision to an append-only audit log.
+  </p>
+
+  
+  <h2>2 · Three Storage Layers (fixed contract)</h2>
+  <div class="store-grid">
+    <div class="store-card">
+      <div class="store-name">🐘 PostgreSQL</div>
+      <div class="store-sub">Relational metadata — <code>rkb/store.py</code></div>
+      <ul class="store-list">
+        <li>repositories</li>
+        <li>modules (+ AI authorship %)</li>
+        <li>business_rules (dedup hash + version)</li>
+        <li>decisions (full HITL audit trail)</li>
+        <li>transformation_priority</li>
+        <li>changeset_manifests + files</li>
+        <li>simulation_results</li>
+        <li>timeline_events</li>
+        <li>test_results</li>
+      </ul>
+    </div>
+    <div class="store-card">
+      <div class="store-name">⚡ Qdrant</div>
+      <div class="store-sub">Semantic memory — <code>rkb/embeddings.py</code></div>
+      <ul class="store-list">
+        <li>Module summaries</li>
+        <li>Business rule text</li>
+        <li>Timeline event summaries</li>
+        <li>Simulation evidence</li>
+        <li>Hierarchy payload filters:<br />repo → domain → module → file → function</li>
+      </ul>
+    </div>
+    <div class="store-card">
+      <div class="store-name">🕸 Neo4j</div>
+      <div class="store-sub">Call + dependency graph — <code>rkb/graph.py</code></div>
+      <ul class="store-list">
+        <li>Nodes: Function, Class, Module, File, ApiEndpoint, DbTable</li>
+        <li>Edges: CALLS, DEPENDS_ON, EXPOSES, READS, WRITES</li>
+        <li>Blast-radius traversal (up to N hops)</li>
+        <li>React Flow structure map</li>
+      </ul>
+    </div>
+  </div>
+  <p>
+    Postgres and Qdrant are <strong>always kept separate by design</strong> — relational facts go to Postgres,
+    vector search goes to Qdrant. Alembic manages all Postgres migrations (<code>alembic/versions/001_initial_schema.py</code>).
+  </p>
+
+  
+  <h2>3 · The Full Pipeline (step by step)</h2>
+  <div class="pipeline">
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">1</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">POST /api/ingest — Clone &amp; Persist</div>
+        <div class="stage-detail">
+          You send a <code>repo_url</code> + optional <code>ref</code>. The backend clones the repo via
+          GitPython into an isolated workspace at <code>.imperium/workspaces/{repo_id}/</code>,
+          detects languages, writes a <code>Repository</code> row to Postgres, and returns
+          <code>repository_id</code> immediately. The heavy work starts in the background.
+          <br /><span class="tag tag-pg">Postgres</span><span class="tag tag-bg">BackgroundTask</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">2</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">Knowledge Base Build (background) — Orchestrator.build_knowledge_base()</div>
+        <div class="stage-detail">
+          Runs in the background immediately after ingest. Five sub-steps in sequence:
+          <br />① <strong>Parse</strong> — all source files via tree-sitter (with regex fallback) → language-agnostic AST nodes
+          <br />② <strong>Call graph</strong> → Neo4j: MERGE Function/Class nodes + CALLS/DEPENDS_ON edges
+          <br />③ <strong>Timeline</strong> — walk git log, classify every commit (feature/refactor/incident/dep-shift/test/doc/churn) → Postgres + Qdrant summaries
+          <br />④ <strong>Embed</strong> — module summaries embedded via Mistral-embed → Qdrant with hierarchy payload
+          <br />⑤ <strong>Priority scores</strong> — 6-factor weighted score per file → <code>transformation_priority</code> table
+          <br /><span class="tag tag-pg">Postgres</span><span class="tag tag-neo">Neo4j</span><span class="tag tag-qd">Qdrant</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">3</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">POST /api/analysis/{id} — Parallel Agent Analysis</div>
+        <div class="stage-detail">
+          Four agents run concurrently via <code>ThreadPoolExecutor</code>:
+          <br />• <strong>StructureAgent</strong> — module map, architecture graph (Cerebras)
+          <br />• <strong>BusinessLogicAgent</strong> — implicit rule extraction from AST (Nemotron + Mistral)
+          <br />• <strong>SecurityAgent</strong> — CVE/vulnerability scan (Cerebras)
+          <br />• <strong>ResearchAgent</strong> — synthesizes timeline + business rules + Qdrant semantic search (Gemini long-context)
+          <br />All findings merge and are persisted as <code>BusinessRule</code> rows. Modernization findings automatically become rules.
+          <br /><span class="tag tag-llm">LLM</span><span class="tag tag-pg">Postgres</span><span class="tag tag-qd">Qdrant</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">4</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">HITL Clarifications — GET /api/clarifications/{id}</div>
+        <div class="stage-detail">
+          Rules extracted with confidence &lt; 70% are surfaced as natural-language questions.
+          Developers answer via <code>POST /api/clarifications/{id}/answer</code>.
+          Answers are written back to the <code>BusinessRule</code> row (<code>verified=true</code>, <code>developer_answer</code>).
+          This becomes permanent RKB knowledge — never lost.
+          <br /><span class="tag tag-pg">Postgres</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">5</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">Gate A — POST /api/gate-a (Human Approval)</div>
+        <div class="stage-detail">
+          You review the findings by category (security, performance, modernization, integration, documentation)
+          and cast <strong>approve / reject / defer</strong> votes. Each vote is persisted as an append-only
+          <code>Decision</code> row with <code>origin=human</code>, the verdict, and the note.
+          Only approved categories advance to transformation.
+          <br /><span class="tag tag-pg">Postgres (append-only)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">6</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">Simulation + Changeset (intelligence layer)</div>
+        <div class="stage-detail">
+          Before any real change is made:
+          <br />• <strong>Changeset organizer</strong> clusters files by module-prefix + shared business rules (union-find) + Neo4j call-graph proximity → <code>ChangesetManifest</code>
+          <br />• <strong>Simulation</strong> per file: describe old behavior → generate new code (Codestral) → build unified diff → LLM safety review → confidence score.
+          If confidence &lt; 0.75 → <strong>blocked</strong> and escalated back to human.
+          Evidence vectors stored in Qdrant.
+          <br /><span class="tag tag-pg">Postgres</span><span class="tag tag-neo">Neo4j</span><span class="tag tag-qd">Qdrant</span><span class="tag tag-llm">Codestral</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">7</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">Gate B — POST /api/gate-b (Behavioral Diff Review)</div>
+        <div class="stage-detail">
+          You review the behavioral diff (old behavior → new behavior) + the confidence score
+          for each approved category. Same approve/reject/defer mechanic — persisted as Decision rows with <code>gate=gate-b</code>.
+          Approved categories merge to integration.
+          <br /><span class="tag tag-pg">Postgres (append-only)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-num"><div class="num-circle">8</div><div class="num-line"></div></div>
+      <div class="stage-body">
+        <div class="stage-title">Documentation + Comprehension (post-merge)</div>
+        <div class="stage-detail">
+          <strong>DocumentationAgent</strong> generates: architecture overview (Mermaid graph), business-rule catalog,
+          decision log table, module reference docs — all Markdown, pulled from live RKB data (Groq + Gemini).
+          <br /><strong>ComprehensionAgent</strong> generates 3 check questions per Gate-B decision
+          and flags modules with ≥70% AI authorship + low comprehension score back into Gate A review.
+          <br /><span class="tag tag-llm">Groq / Gemini / Cerebras</span><span class="tag tag-pg">Postgres</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  
+  <h2>4 · Agent Roster &amp; LLM Routing</h2>
+  <p>Every agent has a fixed role that maps to a provider chain in <code>llm/routing.py</code>. Providers fall through automatically on failure.</p>
+  <div class="agent-grid">
+    <div class="agent-card">
+      <div class="agent-name">ResearchAgent</div>
+      <div class="agent-model">Gemini (long context)</div>
+      <div class="agent-desc">Reads timeline + business rules + Qdrant semantic hits → synthesizes findings and modernization recommendations.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">BusinessLogicAgent</div>
+      <div class="agent-model">Nemotron → Mistral (fallback)</div>
+      <div class="agent-desc">Extracts implicit rules from code. Core differentiator — finds undocumented limits, guards, clamps, magic constants.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">StructureAgent</div>
+      <div class="agent-model">Cerebras</div>
+      <div class="agent-desc">Builds the module map and structure graph used by the React Flow UI and priority scoring.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">SecurityAgent</div>
+      <div class="agent-model">Cerebras</div>
+      <div class="agent-desc">Scans for CVEs, unsafe patterns, and tech-debt signals. Score feeds into the priority ranking.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">ImplementationAgent</div>
+      <div class="agent-model">Codestral (Mistral)</div>
+      <div class="agent-desc">Generates modernized code. Feeds the simulation dry-run before any real change is written.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">DocumentationAgent</div>
+      <div class="agent-model">Groq → Gemini (fallback)</div>
+      <div class="agent-desc">Produces Markdown + Mermaid architecture, rule catalog, decision log table, module reference.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">ComprehensionAgent</div>
+      <div class="agent-model">Cerebras</div>
+      <div class="agent-desc">Post-Gate-B: 3-question comprehension checks per decision. Flags high-AI-authorship modules for re-review.</div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">CompatibilityAgent &amp; TestingAgent</div>
+      <div class="agent-model">Cerebras / Mistral</div>
+      <div class="agent-desc">Compatibility gate checking and test-code generation (Phase 1 stubs, wired into pipeline).</div>
+    </div>
+  </div>
+
+  
+  <h2>5 · Transformation Priority Score (what to modernize first)</h2>
+  <p>Computed for every file after ingestion. Six weighted factors — higher = modernize sooner.</p>
+  <table>
+    <tr><th>Factor</th><th>Weight</th><th>Source</th></tr>
+    <tr><td>Blast radius (dependents)</td><td>30%</td><td>Neo4j traversal</td></tr>
+    <tr><td>Business rule density</td><td>20%</td><td>Postgres business_rules</td></tr>
+    <tr><td>Low-confidence rules</td><td>15%</td><td>Postgres (confidence &lt; 0.7)</td></tr>
+    <tr><td>AI authorship %</td><td>15%</td><td>Module.ai_authorship_pct</td></tr>
+    <tr><td>Churn (commits/month)</td><td>10%</td><td>Timeline events</td></tr>
+    <tr><td>Security debt findings</td><td>10%</td><td>SecurityAgent findings</td></tr>
+  </table>
+
+  
+  <h2>6 · Full API Surface</h2>
+  <table>
+    <tr><th>Endpoint</th><th>What it does</th></tr>
+    <tr><td><span class="method get">GET</span>/health</td><td>Pings Postgres, Qdrant, Neo4j — returns status per store</td></tr>
+    <tr><td><span class="method post">POST</span>/api/ingest</td><td>Clone repo, persist Repository row, kick off KB pipeline in background</td></tr>
+    <tr><td><span class="method post">POST</span>/api/analysis/{id}</td><td>Run 4 agents in parallel, merge + persist findings</td></tr>
+    <tr><td><span class="method get">GET</span>/api/analysis/{id}</td><td>Fetch persisted analysis results from RKB</td></tr>
+    <tr><td><span class="method post">POST</span>/api/gate-a</td><td>Submit Gate A votes (approve/reject/defer per category) → persisted as Decision rows</td></tr>
+    <tr><td><span class="method post">POST</span>/api/gate-b</td><td>Submit Gate B votes (behavioral diff review) → persisted as Decision rows</td></tr>
+    <tr><td><span class="method get">GET</span>/api/clarifications/{id}</td><td>Get HITL questions for low-confidence business rules (&lt;70%)</td></tr>
+    <tr><td><span class="method post">POST</span>/api/clarifications/{id}/answer</td><td>Submit developer answer → marks rule as verified in Postgres</td></tr>
+    <tr><td><span class="method get">GET</span>/api/decisions/{id}</td><td>Full append-only decision log (agent + human, with prompts/answers)</td></tr>
+  </table>
+
+  
+  <h2>7 · The Append-Only Decision Log (audit trail)</h2>
+  <p>
+    Every decision — whether made by an agent or a human — is written as a new row in the <code>decisions</code> table.
+    Nothing is ever overwritten. Each row records:
+  </p>
+  <div class="rule-box">
+    <strong>Decision row fields</strong>
+    <code>category</code> · <code>change_summary</code> · <code>rule_preserved</code> · <code>alternative_rejected</code> ·
+    <code>gate</code> (gate-a / gate-b) · <code>origin</code> (agent / human) · <code>approver</code> ·
+    <code>verdict</code> (approve / reject / defer) · <code>prompt_asked</code> · <code>prompt_answer</code> · <code>created_at</code>
+  </div>
+  <p>This is both the <strong>audit trail</strong> and the <strong>training signal</strong> — future runs use it to avoid repeating mistakes.</p>
+
+  
+  <h2>8 · Human-in-the-Loop (HITL) Flow</h2>
+  <div class="hitl">
+    <div class="hitl-box">Rule extracted<br /><small>confidence &lt; 70%</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">HITL question<br /><small>stored in DB</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">Developer answers<br /><small>POST /clarifications/answer</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">Rule marked verified<br /><small>answer saved forever</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">Used in future<br />pipeline runs</div>
+  </div>
+  <div class="hitl">
+    <div class="hitl-box">Simulation<br /><small>confidence &lt; 0.75</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">Blocked + escalated<br /><small>block_reason stored</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">Human reviews<br /><small>Gate A/B vote</small></div>
+    <div class="hitl-arrow">→</div>
+    <div class="hitl-box">Decision logged<br /><small>append-only</small></div>
+  </div>
+
+  
+  <h2>9 · Memory Hierarchy (how agents remember context)</h2>
+  <p>
+    When an agent needs context, it queries Qdrant with a filter that picks the <strong>coarsest level
+    that answers the question</strong>, then drills down. This avoids flooding context windows.
+  </p>
+  <div class="rule-box">
+    <strong>Hierarchy encoded as Qdrant payload keys</strong>
+    Repository → Domain → Module → File → Function → Paragraph → Statement
+    <br />Example filter: <code>{"repository_id": "abc", "module": "auth"}</code> → returns only auth-module vectors
+  </div>
+
+  
+  <h2>10 · How to Start It</h2>
+  <p><strong>1. Set environment variables</strong> (copy <code>.env.example</code> → <code>.env</code>, fill in API keys and DB URLs).</p>
+  <p><strong>2. Start the databases</strong> via Docker Compose:</p>
+  <div class="rule-box" style="font-family:monospace;font-size:12px">docker compose up -d</div>
+  <p><strong>3. Run Alembic migration</strong> (creates all 10 tables):</p>
+  <div class="rule-box" style="font-family:monospace;font-size:12px">cd backend &amp;&amp; alembic upgrade head</div>
+  <p><strong>4. Start the API server:</strong></p>
+  <div class="rule-box" style="font-family:monospace;font-size:12px">cd backend &amp;&amp; uvicorn imperium.main:app --reload --port 8000</div>
+  <p><strong>5. Interactive docs:</strong> open <code>http://localhost:8000/docs</code></p>
+
+  <footer>Made with IBM Bob</footer>
+</div>
+</body>
+</html>

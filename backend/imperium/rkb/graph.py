@@ -20,13 +20,97 @@ def _driver():
 
 
 def write_call_graph(repository_id: str, nodes: list[dict], edges: list[dict]) -> None:
-    """TODO(team): MERGE nodes/edges from Call Graph Builder output."""
-    raise NotImplementedError("RKB graph write — team task")
+    """MERGE nodes/edges from Call Graph Builder output into Neo4j.
+
+    Each node dict must have: {id, kind, name, repository_id, ...extra}.
+    Each edge dict must have: {source, target, type} where type is one of
+    CALLS | DEPENDS_ON | EXPOSES | READS | WRITES | INTEGRATES_WITH.
+    """
+    driver = _driver()
+    with driver.session() as session:
+        # Upsert nodes
+        for node in nodes:
+            kind = node.get("kind", "Unknown")
+            props = {k: v for k, v in node.items() if k != "kind"}
+            props["repository_id"] = repository_id
+            session.run(
+                f"MERGE (n:{kind} {{id: $id}}) SET n += $props",
+                id=node["id"],
+                props=props,
+            )
+
+        # Upsert edges
+        for edge in edges:
+            rel_type = edge.get("type", "CALLS")
+            session.run(
+                f"""
+                MATCH (a {{id: $source}}), (b {{id: $target}})
+                MERGE (a)-[r:{rel_type}]->(b)
+                """,
+                source=edge["source"],
+                target=edge["target"],
+            )
 
 
 def blast_radius(function_id: str, depth: int = 3) -> list[dict]:
-    """Change blast radius (TDD §9, §11): traverse dependents up to depth. TODO(team)."""
-    raise NotImplementedError("blast radius traversal — team task")
+    """Return all nodes that depend on function_id up to `depth` hops (callers/dependents).
+
+    Traverses CALLS and DEPENDS_ON edges in reverse direction.
+    Returns list of {id, kind, name, hops}.
+    """
+    driver = _driver()
+    with driver.session() as session:
+        result = session.run(
+            """
+            MATCH path = (start {id: $fid})<-[:CALLS|DEPENDS_ON*1..$depth]-(dependent)
+            RETURN DISTINCT
+                dependent.id AS id,
+                labels(dependent)[0] AS kind,
+                dependent.name AS name,
+                length(path) AS hops
+            ORDER BY hops
+            """,
+            fid=function_id,
+            depth=depth,
+        )
+        return [dict(record) for record in result]
+
+
+def query_dependents(node_id: str) -> list[dict]:
+    """Return direct dependents of a node (1-hop blast radius)."""
+    return blast_radius(node_id, depth=1)
+
+
+def get_node(node_id: str) -> dict | None:
+    """Fetch a single node by id."""
+    driver = _driver()
+    with driver.session() as session:
+        result = session.run(
+            "MATCH (n {id: $id}) RETURN n",
+            id=node_id,
+        )
+        record = result.single()
+        return dict(record["n"]) if record else None
+
+
+def repo_graph(repository_id: str) -> dict:
+    """Return all nodes and edges for a repository as a structure map (React Flow)."""
+    driver = _driver()
+    with driver.session() as session:
+        nodes_res = session.run(
+            "MATCH (n {repository_id: $rid}) RETURN n",
+            rid=repository_id,
+        )
+        edges_res = session.run(
+            """
+            MATCH (a {repository_id: $rid})-[r]->(b {repository_id: $rid})
+            RETURN a.id AS source, b.id AS target, type(r) AS type
+            """,
+            rid=repository_id,
+        )
+        nodes = [dict(record["n"]) for record in nodes_res]
+        edges = [dict(record) for record in edges_res]
+        return {"nodes": nodes, "edges": edges}
 
 
 def ping() -> dict[str, str]:
