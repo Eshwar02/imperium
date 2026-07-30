@@ -29,7 +29,6 @@ def all_keys(monkeypatch):
         "GROQ_API_KEY",
         "CEREBRAS_API_KEY",
         "MISTRAL_API_KEY",
-        "GEMINI_API_KEY",
     ):
         monkeypatch.setenv(env, "sk-test-" + env.lower())
     get_settings.cache_clear()
@@ -64,14 +63,14 @@ def test_multi_provider_role_builds_fallback_chain(all_keys):
     from imperium.llm.factory import build_runnable
     from langchain_core.runnables import RunnableWithFallbacks
 
-    runnable = build_runnable("orchestrator")  # [nemotron, groq, gemini]
+    runnable = build_runnable("orchestrator")  # [nemotron, groq]
     assert isinstance(runnable, RunnableWithFallbacks)
-    assert len(runnable.fallbacks) == 2
+    assert len(runnable.fallbacks) == 1
 
 
 def test_missing_api_keys_are_skipped(monkeypatch):
     # Only cerebras configured; business_logic (nemotron, mistral) has no keys.
-    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"):
+    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY"):
         monkeypatch.setenv(env, "changeme")
     monkeypatch.setenv("CEREBRAS_API_KEY", "sk-real")
     get_settings.cache_clear()
@@ -90,7 +89,6 @@ def test_no_usable_providers_raises(monkeypatch):
         "GROQ_API_KEY",
         "CEREBRAS_API_KEY",
         "MISTRAL_API_KEY",
-        "GEMINI_API_KEY",
     ):
         monkeypatch.setenv(env, "changeme")
     get_settings.cache_clear()

@@ -43,9 +43,6 @@ class Settings(BaseSettings):
     # Mistral Codestral — implementation / test codegen / business-logic secondary
     mistral_api_key: str = "changeme"
     mistral_model: str = "codestral-latest"
-    # Gemini — research (long-context) / fallback
-    gemini_api_key: str = "changeme"
-    gemini_model: str = "gemini-2.0-flash"
 
     # Sandbox
     sandbox_image: str = "python:3.12-slim"

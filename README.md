@@ -19,7 +19,7 @@ drift** but **comprehension drift** (what a team understands vs. what AI shipped
 ## What works today
 
 - **Per-agent LLM layer** — each agent role routes to its own provider chain
-  (NVIDIA / Groq / Gemini / Cerebras / Mistral) via LangChain `ChatOpenAI` with
+  (NVIDIA / Groq / Cerebras / Mistral) via LangChain `ChatOpenAI` with
   automatic fallback, streaming, and token accounting. No OpenAI.
 - **Tool-using agents** — research / security / compatibility investigate with
   read-only tools over the engine (semantic memory, call graph, API/data graphs,

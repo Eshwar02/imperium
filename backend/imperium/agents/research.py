@@ -4,8 +4,8 @@ Rather than pre-stuffing context, the agent is given read-only tools over the Re
 Intelligence Engine — semantic memory, the business-rule registry, the timeline, the
 call graph, and source — and decides what to retrieve to ground its findings.
 
-Runs on the ``research`` role (Gemini long-context primary, with the routing chain as
-fallback middleware).
+Runs on the ``research`` role (NVIDIA Nemotron primary, Groq fallback via the routing
+chain's fallback middleware).
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def _module_task(module) -> str:
 
 class ResearchAgent(BaseAgent):
     name = "research"
-    role = "research"  # → Gemini (long context)
+    role = "research"  # → Nemotron primary, Groq fallback
 
     def run(self, ctx: AgentContext) -> dict:
         """Investigate the repository (map-reduce over modules) and return findings."""

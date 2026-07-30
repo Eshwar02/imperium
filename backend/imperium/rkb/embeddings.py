@@ -43,7 +43,7 @@ def _ensure_collection() -> None:
 
 
 def _embed(text: str) -> list[float]:
-    """Embed text using the configured LLM provider (Gemini / Mistral / fallback).
+    """Embed text using the configured LLM provider (Mistral / fallback).
 
     Falls back to a zero-vector if no embedding provider is available so the
     pipeline degrades gracefully during dev without API keys.

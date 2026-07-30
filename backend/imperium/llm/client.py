@@ -11,7 +11,7 @@ New in the LangChain layer:
     msg = chat("research", [("system", "..."), ("user", "...")])
     for chunk in stream("documentation", [("user", "...")]): ...
 
-Providers (NVIDIA/Groq/Gemini/Cerebras/Mistral) are reached through ``ChatOpenAI``
+Providers (NVIDIA/Groq/Cerebras/Mistral) are reached through ``ChatOpenAI``
 with a per-provider ``base_url``; construction and fallback wiring live in factory.py.
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """LLM provider registry (Phase 1). NO OpenAI / OpenRouter — per user constraint.
 
-Providers used in Phase 1: NVIDIA Nemotron, Groq, Gemini, Cerebras, Mistral.
+Providers used in Phase 1: NVIDIA Nemotron, Groq, Cerebras, Mistral.
 All expose an OpenAI-*compatible* chat-completions wire format (HTTP shape only —
 none are OpenAI models), so one client covers them. Each entry: base URL + the env
 vars holding its API key and default model.
@@ -33,13 +33,6 @@ PROVIDERS: dict[str, Provider] = {
     ),
     "mistral": Provider(
         "mistral", "https://api.mistral.ai/v1", "mistral_api_key", "mistral_model"
-    ),
-    # Gemini exposes an OpenAI-compatible endpoint — keeps the single client working.
-    "gemini": Provider(
-        "gemini",
-        "https://generativelanguage.googleapis.com/v1beta/openai",
-        "gemini_api_key",
-        "gemini_model",
     ),
 }
 

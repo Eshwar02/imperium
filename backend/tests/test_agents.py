@@ -22,7 +22,7 @@ def _clear_factory_cache():
 
 @pytest.fixture
 def all_keys(monkeypatch):
-    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"):
+    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY"):
         monkeypatch.setenv(env, "sk-test")
     get_settings.cache_clear()
     yield
@@ -77,13 +77,13 @@ def test_read_source_reads_within_repo_and_refuses_traversal(tmp_path):
 def test_agent_model_chain_splits_primary_and_fallbacks(all_keys):
     from imperium.agents.agent_factory import agent_model_chain
 
-    primary, fallbacks = agent_model_chain("orchestrator")  # nemotron, groq, gemini
+    primary, fallbacks = agent_model_chain("orchestrator")  # nemotron, groq
     assert primary.openai_api_base == "https://integrate.api.nvidia.com/v1"
-    assert len(fallbacks) == 2
+    assert len(fallbacks) == 1
 
 
 def test_agent_model_chain_raises_without_keys(monkeypatch):
-    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"):
+    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY"):
         monkeypatch.setenv(env, "changeme")
     get_settings.cache_clear()
     try:
@@ -99,7 +99,7 @@ def test_build_agent_wires_fallback_middleware(all_keys):
     from imperium.agents.agent_factory import build_agent
     from imperium.agents.tools import build_tools
 
-    # research is single-provider (gemini) -> no fallback middleware, still builds.
+    # research is multi-provider (nemotron -> groq) -> fallback middleware, builds fine.
     agent = build_agent("research", "sys", build_tools(_ctx()))
     assert agent is not None
 
@@ -149,7 +149,7 @@ def test_parse_findings_handles_no_json_and_malformed():
 # ── analysis agents degrade gracefully without providers ──────────────────────
 
 def test_analysis_agents_return_empty_without_providers(monkeypatch):
-    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"):
+    for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY"):
         monkeypatch.setenv(env, "changeme")
     get_settings.cache_clear()
     try:

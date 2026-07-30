@@ -28,7 +28,7 @@ _DOC_SYSTEM = (
 
 class DocumentationAgent(BaseAgent):
     name = "documentation"
-    role = "documentation"  # → Groq primary, Gemini fallback
+    role = "documentation"  # → Groq primary, Nemotron fallback
 
     def run(self, ctx: AgentContext) -> dict:
         """Generate the full documentation suite for a repository."""

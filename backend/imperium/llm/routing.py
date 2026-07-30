@@ -9,18 +9,18 @@ from __future__ import annotations
 
 # role -> ordered list of provider ids (first = primary, rest = fallback)
 ROUTING: dict[str, list[str]] = {
-    "orchestrator": ["nemotron", "groq", "gemini"],
+    "orchestrator": ["nemotron", "groq"],
     "structure": ["cerebras"],
     "business_logic": ["nemotron", "mistral"],   # mistral = secondary code-nuance check
     "security": ["cerebras"],
-    "research": ["gemini"],                        # long-context external synthesis
+    "research": ["nemotron", "groq"],              # reasoning-led synthesis, groq fallback
     "implementation": ["mistral"],                 # Codestral — code generation/migration
     "compatibility": ["cerebras", "groq"],
     "test_codegen": ["mistral"],                   # write test code
     "test_edgecase": ["nemotron"],                 # reason which edge cases matter
-    "documentation": ["groq", "gemini"],
+    "documentation": ["groq", "nemotron"],
     "comprehension": ["cerebras"],
-    "healing": ["groq", "cerebras", "gemini"],  # fast, cheap diagnosis of system faults
+    "healing": ["groq", "cerebras"],  # fast, cheap diagnosis of system faults
 }
 
 
