@@ -44,10 +44,11 @@ class SecurityAgent(BaseAgent):
     role = "security"  # → Cerebras
 
     def run(self, ctx: AgentContext) -> dict:
-        """Audit the repository (map-reduce over modules) and return security findings."""
-        from imperium.agents.scale import run_scaled_findings
+        """Audit the repository: deterministic scan + LLM map-reduce, merged."""
+        from imperium.agents.scale import _dedupe, run_scaled_findings
 
-        findings = run_scaled_findings(
+        findings = self._deterministic_findings(ctx)
+        findings += run_scaled_findings(
             self.role,
             _SECURITY_SYSTEM,
             ctx,
@@ -56,4 +57,16 @@ class SecurityAgent(BaseAgent):
             default_category="security",
             default_confidence=0.6,
         )
-        return {"findings": findings}
+        return {"findings": _dedupe(findings)}
+
+    def _deterministic_findings(self, ctx: AgentContext) -> list[dict]:
+        """Fast regex scan — runs without an LLM, so it works even offline."""
+        if not ctx.repo_path:
+            return []
+        try:
+            from imperium.intelligence.security_scanner import scan
+
+            return [f.model_dump() for f in scan(ctx.repo_path)]
+        except Exception as exc:  # noqa: BLE001
+            log.debug("deterministic security scan failed: %s", exc)
+            return []
