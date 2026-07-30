@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 
 from imperium.agents.base import AgentContext, BaseAgent
-from imperium.agents.parsing import parse_findings
 
 log = logging.getLogger("imperium.agents.security")
 
@@ -30,19 +29,31 @@ _SECURITY_TASK = (
 )
 
 
+def _module_task(module) -> str:
+    path = getattr(module, "path", "")
+    name = getattr(module, "name", path)
+    return (
+        f"Audit the module '{name}' (path: {path}) for security vulnerabilities. Use "
+        "read_source on its files, list_api_endpoints and list_data_access for exposure "
+        "and data-access risk, and blast_radius for impact. Return findings JSON."
+    )
+
+
 class SecurityAgent(BaseAgent):
     name = "security"
     role = "security"  # → Cerebras
 
     def run(self, ctx: AgentContext) -> dict:
-        """Audit the repository and return security findings."""
-        try:
-            from imperium.agents.agent_factory import run_tool_agent
+        """Audit the repository (map-reduce over modules) and return security findings."""
+        from imperium.agents.scale import run_scaled_findings
 
-            text = run_tool_agent(self.role, _SECURITY_SYSTEM, _SECURITY_TASK, ctx)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Security agent could not run: %s", exc)
-            return {"findings": []}
-
-        findings = parse_findings(text, default_category="security", default_confidence=0.6)
-        return {"findings": [f.model_dump() for f in findings]}
+        findings = run_scaled_findings(
+            self.role,
+            _SECURITY_SYSTEM,
+            ctx,
+            task_for_module=_module_task,
+            whole_repo_task=_SECURITY_TASK,
+            default_category="security",
+            default_confidence=0.6,
+        )
+        return {"findings": findings}

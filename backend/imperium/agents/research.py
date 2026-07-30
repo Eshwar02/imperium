@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 
 from imperium.agents.base import AgentContext, BaseAgent
-from imperium.agents.parsing import parse_findings
 
 log = logging.getLogger("imperium.agents.research")
 
@@ -33,18 +32,31 @@ _RESEARCH_TASK = (
 )
 
 
+def _module_task(module) -> str:
+    path = getattr(module, "path", "")
+    name = getattr(module, "name", path)
+    return (
+        f"Focus your analysis on the module '{name}' (path: {path}). Use read_source on "
+        "its files and the graph/memory tools for context. Report modernization "
+        "opportunities, technical debt, and risks for this module as findings JSON."
+    )
+
+
 class ResearchAgent(BaseAgent):
     name = "research"
     role = "research"  # → Gemini (long context)
 
     def run(self, ctx: AgentContext) -> dict:
-        """Investigate the repository with tools and return structured findings."""
-        try:
-            from imperium.agents.agent_factory import run_tool_agent
+        """Investigate the repository (map-reduce over modules) and return findings."""
+        from imperium.agents.scale import run_scaled_findings
 
-            text = run_tool_agent(self.role, _RESEARCH_SYSTEM, _RESEARCH_TASK, ctx)
-        except Exception as exc:  # noqa: BLE001 — no keys / provider down / backend down
-            log.warning("Research agent could not run: %s", exc)
-            return {"findings": []}
-
-        return {"findings": [f.model_dump() for f in parse_findings(text)]}
+        findings = run_scaled_findings(
+            self.role,
+            _RESEARCH_SYSTEM,
+            ctx,
+            task_for_module=_module_task,
+            whole_repo_task=_RESEARCH_TASK,
+            default_category="modernization",
+            default_confidence=0.7,
+        )
+        return {"findings": findings}

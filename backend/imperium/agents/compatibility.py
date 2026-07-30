@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 
 from imperium.agents.base import AgentContext, BaseAgent
-from imperium.agents.parsing import parse_findings
 
 log = logging.getLogger("imperium.agents.compatibility")
 
@@ -29,19 +28,31 @@ _COMPAT_TASK = (
 )
 
 
+def _module_task(module) -> str:
+    path = getattr(module, "path", "")
+    name = getattr(module, "name", path)
+    return (
+        f"Review the module '{name}' (path: {path}) for compatibility and deprecation "
+        "risk. Use read_source and list_api_endpoints to find external API/library "
+        "usage. Return findings JSON."
+    )
+
+
 class CompatibilityAgent(BaseAgent):
     name = "compatibility"
     role = "compatibility"  # → Cerebras primary, Groq fallback
 
     def run(self, ctx: AgentContext) -> dict:
-        """Review integrations/dependencies and return compatibility findings."""
-        try:
-            from imperium.agents.agent_factory import run_tool_agent
+        """Review integrations/dependencies (map-reduce over modules); return findings."""
+        from imperium.agents.scale import run_scaled_findings
 
-            text = run_tool_agent(self.role, _COMPAT_SYSTEM, _COMPAT_TASK, ctx)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Compatibility agent could not run: %s", exc)
-            return {"findings": []}
-
-        findings = parse_findings(text, default_category="integration", default_confidence=0.6)
-        return {"findings": [f.model_dump() for f in findings]}
+        findings = run_scaled_findings(
+            self.role,
+            _COMPAT_SYSTEM,
+            ctx,
+            task_for_module=_module_task,
+            whole_repo_task=_COMPAT_TASK,
+            default_category="integration",
+            default_confidence=0.6,
+        )
+        return {"findings": findings}
