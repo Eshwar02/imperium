@@ -13,6 +13,7 @@ from __future__ import annotations
 import difflib
 import logging
 import os
+import uuid
 
 from imperium.agents.base import AgentContext, BaseAgent
 
@@ -61,6 +62,53 @@ class ImplementationAgent(BaseAgent):
             changes.append({"file_path": rel_path, "new_code": new_code, "diff": diff})
 
         return {"proposed_changes": changes}
+
+    def apply_changes(
+        self, ctx: AgentContext, proposed_changes: list[dict], branch: str | None = None
+    ) -> dict:
+        """Apply approved edits in an **isolated git branch** — never touches main.
+
+        Operates on the workspace clone at ``ctx.repo_path``. Writes each change's
+        ``new_code``, commits with a message traceable to the changeset, and leaves the
+        default branch untouched. Returns ``{applied, branch, files, commit}``.
+        """
+        if not ctx.repo_path or not proposed_changes:
+            return {"applied": False, "reason": "no repo_path or no changes"}
+        try:
+            from git import Repo
+
+            repo = Repo(ctx.repo_path)
+        except Exception as exc:  # noqa: BLE001 — not a git repo / gitpython missing
+            log.warning("apply_changes: cannot open git repo: %s", exc)
+            return {"applied": False, "reason": f"not a git repo: {exc}"}
+
+        branch = branch or f"imperium/auto-{uuid.uuid4().hex[:8]}"
+        try:
+            repo.git.checkout("-b", branch)  # new branch off current HEAD; main untouched
+            written: list[str] = []
+            for change in proposed_changes:
+                rel = change.get("file_path")
+                code = change.get("new_code")
+                if not rel or code is None:
+                    continue
+                full = os.path.normpath(os.path.join(ctx.repo_path, rel))
+                if not full.startswith(os.path.normpath(ctx.repo_path)):
+                    continue  # refuse path traversal
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as fh:
+                    fh.write(code)
+                written.append(rel)
+            if not written:
+                return {"applied": False, "reason": "no writable changes", "branch": branch}
+            repo.index.add(written)
+            commit = repo.index.commit(
+                f"Imperium: apply approved transformation ({len(written)} files)\n\n"
+                f"Changeset: {ctx.scratch.get('changeset_id', 'auto')}"
+            )
+            return {"applied": True, "branch": branch, "files": written, "commit": commit.hexsha}
+        except Exception as exc:  # noqa: BLE001
+            log.warning("apply_changes failed: %s", exc)
+            return {"applied": False, "reason": str(exc)[:200], "branch": branch}
 
     # ── helpers ───────────────────────────────────────────────────────────────
 

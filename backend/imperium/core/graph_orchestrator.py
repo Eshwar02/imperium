@@ -57,9 +57,50 @@ class Steps:
         return {"structure_map": resp.structure_map or {}, "findings": findings}
 
     def simulate(self, state: RunState) -> list:
-        # Simulations for approved categories are produced by the intelligence layer;
-        # kept minimal here — the real batch pipeline lives in intelligence.simulation.
-        return state.get("simulations", [])
+        """Batch-simulate the approved changeset's files (old→new→diff→confidence)."""
+        if not state.get("approved_categories"):
+            return []
+        files = self._changeset_files(state)
+        if not files:
+            return []
+        from imperium.intelligence.simulation import run_batch_simulation
+
+        return run_batch_simulation(
+            state["repository_id"],
+            files,
+            instructions="Modernize while preserving all business rules and behavior.",
+        )
+
+    def _changeset_files(self, state: RunState) -> list[dict]:
+        """Read the latest changeset's files as [{file_path, code}] (bounded)."""
+        import os
+
+        repo_path = state.get("repo_path", "")
+        if not repo_path:
+            return []
+        try:
+            from imperium.rkb.store import get_changesets, get_session
+
+            session = get_session()
+            try:
+                changesets = get_changesets(session, state["repository_id"])
+                paths = [f.file_path for f in getattr(changesets[-1], "files", [])] if changesets else []
+            finally:
+                session.close()
+        except Exception:  # noqa: BLE001
+            return []
+
+        files: list[dict] = []
+        for rel in paths[:20]:
+            full = os.path.normpath(os.path.join(repo_path, rel))
+            if not full.startswith(os.path.normpath(repo_path)) or not os.path.isfile(full):
+                continue
+            try:
+                with open(full, encoding="utf-8", errors="replace") as fh:
+                    files.append({"file_path": rel, "code": fh.read(20_000)})
+            except OSError:
+                continue
+        return files
 
     def finalize(self, state: RunState) -> dict:
         docs = self._orch.documentation.run(
