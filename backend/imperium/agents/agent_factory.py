@@ -61,3 +61,21 @@ def run_agent(agent, user_message: str) -> str:
         return text()
     content = getattr(last, "content", "")
     return content if isinstance(content, str) else str(content)
+
+
+def run_tool_agent(
+    role: str,
+    system_prompt: str,
+    task: str,
+    ctx,
+    temperature: float = 0.2,
+) -> str:
+    """Build a tool-using agent for ``role`` bound to ``ctx`` and run one task turn.
+
+    Convenience for the analysis agents that all follow build-tools → build-agent →
+    run pattern. Imports ``build_tools`` lazily to avoid a module import cycle.
+    """
+    from imperium.agents.tools import build_tools
+
+    agent = build_agent(role, system_prompt, build_tools(ctx), temperature)
+    return run_agent(agent, task)

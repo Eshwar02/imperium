@@ -9,12 +9,10 @@ fallback middleware).
 """
 from __future__ import annotations
 
-import json
 import logging
-import re
 
 from imperium.agents.base import AgentContext, BaseAgent
-from imperium.api.schemas import Category, Finding
+from imperium.agents.parsing import parse_findings
 
 log = logging.getLogger("imperium.agents.research")
 
@@ -42,38 +40,11 @@ class ResearchAgent(BaseAgent):
     def run(self, ctx: AgentContext) -> dict:
         """Investigate the repository with tools and return structured findings."""
         try:
-            from imperium.agents.agent_factory import build_agent, run_agent
-            from imperium.agents.tools import build_tools
+            from imperium.agents.agent_factory import run_tool_agent
 
-            agent = build_agent(self.role, _RESEARCH_SYSTEM, build_tools(ctx))
-            text = run_agent(agent, _RESEARCH_TASK)
+            text = run_tool_agent(self.role, _RESEARCH_SYSTEM, _RESEARCH_TASK, ctx)
         except Exception as exc:  # noqa: BLE001 — no keys / provider down / backend down
             log.warning("Research agent could not run: %s", exc)
             return {"findings": []}
 
-        return {"findings": [f.model_dump() for f in self._parse_findings(text)]}
-
-    def _parse_findings(self, text: str) -> list[Finding]:
-        """Extract the JSON findings array from the agent's final message."""
-        match = re.search(r"\[.*\]", text or "", re.DOTALL)
-        if not match:
-            return []
-        try:
-            raw = json.loads(match.group())
-        except json.JSONDecodeError:
-            return []
-        findings: list[Finding] = []
-        for f in raw[:20]:
-            try:
-                findings.append(
-                    Finding(
-                        category=Category(f.get("category", "modernization")),
-                        title=f.get("title", "Research finding"),
-                        detail=f.get("detail", ""),
-                        confidence=float(f.get("confidence", 0.7)),
-                        locations=f.get("locations", []),
-                    )
-                )
-            except Exception:  # noqa: BLE001 — skip malformed entries
-                continue
-        return findings
+        return {"findings": [f.model_dump() for f in parse_findings(text)]}

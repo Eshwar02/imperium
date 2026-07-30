@@ -107,35 +107,107 @@ def test_run_agent_extracts_final_message_text():
     assert run_agent(_Agent(), "task") == "the answer"
 
 
-# ── research findings parsing ─────────────────────────────────────────────────
+# ── findings parsing (shared) ─────────────────────────────────────────────────
 
-def test_research_parses_findings_json():
-    from imperium.agents.research import ResearchAgent
+def test_parse_findings_extracts_json():
+    from imperium.agents.parsing import parse_findings
 
     text = (
         "Here is my analysis:\n"
         '[{"category": "security", "title": "SQLi", "detail": "raw query", '
         '"confidence": 0.9, "locations": ["db.py:12"]}]'
     )
-    findings = ResearchAgent()._parse_findings(text)
+    findings = parse_findings(text)
     assert len(findings) == 1
     assert findings[0].category.value == "security"
     assert findings[0].locations == ["db.py:12"]
 
 
-def test_research_parse_handles_no_json():
-    from imperium.agents.research import ResearchAgent
+def test_parse_findings_applies_default_category():
+    from imperium.agents.parsing import parse_findings
 
-    assert ResearchAgent()._parse_findings("no json here") == []
+    findings = parse_findings('[{"title": "x", "detail": "y"}]', default_category="integration")
+    assert findings[0].category.value == "integration"
 
 
-def test_research_run_returns_empty_without_providers(monkeypatch):
+def test_parse_findings_handles_no_json_and_malformed():
+    from imperium.agents.parsing import parse_findings
+
+    assert parse_findings("no json here") == []
+    # malformed entries are skipped individually
+    assert parse_findings('[{"category": "nope"}, {"title": "ok", "detail": "d"}]') != []
+
+
+# ── analysis agents degrade gracefully without providers ──────────────────────
+
+def test_analysis_agents_return_empty_without_providers(monkeypatch):
     for env in ("NVIDIA_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY", "MISTRAL_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.setenv(env, "changeme")
     get_settings.cache_clear()
     try:
         from imperium.agents.research import ResearchAgent
+        from imperium.agents.security import SecurityAgent
+        from imperium.agents.compatibility import CompatibilityAgent
 
         assert ResearchAgent().run(_ctx()) == {"findings": []}
+        assert SecurityAgent().run(_ctx()) == {"findings": []}
+        assert CompatibilityAgent().run(_ctx()) == {"findings": []}
     finally:
         get_settings.cache_clear()
+
+
+def test_business_logic_without_repo_path_returns_empty():
+    from imperium.agents.business_logic import BusinessLogicAgent
+
+    assert BusinessLogicAgent().run(_ctx()) == {"findings": []}
+
+
+def test_implementation_without_repo_path_returns_empty():
+    from imperium.agents.implementation import ImplementationAgent
+
+    assert ImplementationAgent().run(_ctx()) == {"proposed_changes": []}
+
+
+def test_structure_returns_structure_map(monkeypatch):
+    from imperium.agents import structure
+
+    monkeypatch.setattr("imperium.rkb.graph.repo_graph", lambda rid: {"nodes": [{"id": "a"}], "edges": []})
+    out = structure.StructureAgent().run(_ctx())
+    assert out["structure_map"]["nodes"] == [{"id": "a"}]
+    assert out["findings"] == []
+
+
+def test_testing_behavioral_diff_flags_regression(monkeypatch):
+    from imperium.agents.testing import TestingAgent
+
+    class _Row:
+        def __init__(self, phase, dimension, payload):
+            self.phase, self.dimension, self.payload = phase, dimension, payload
+
+    rows = [
+        _Row("baseline", "behavior", {"passed": True}),
+        _Row("post_change", "behavior", {"passed": False}),
+        _Row("baseline", "security", {"passed": True}),
+        _Row("post_change", "security", {"passed": True}),
+    ]
+
+    class _Q:
+        def filter_by(self, **k):
+            return self
+
+        def all(self):
+            return rows
+
+    class _Session:
+        def query(self, *a):
+            return _Q()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("imperium.rkb.store.get_session", lambda: _Session())
+    diff = TestingAgent().behavioral_diff(_ctx())
+    assert diff["regressions"] == 1
+    assert diff["safe"] is False
+    behavior = next(r for r in diff["report"] if r["dimension"] == "behavior")
+    assert behavior["regression"] is True
