@@ -154,6 +154,15 @@ def test_parse_steps_extracts_json():
     assert CodeAgent()._parse_steps("no json here") == []
 
 
+def test_parse_steps_handles_double_encoded():
+    from imperium.agents.code_agent import CodeAgent
+
+    # some models return an array of JSON *strings* rather than objects
+    raw = '["{\\"file\\": \\"app.py\\", \\"action\\": \\"doc\\", \\"rationale\\": \\"y\\"}"]'
+    steps = CodeAgent()._parse_steps(raw)
+    assert steps == [{"file": "app.py", "action": "doc", "rationale": "y"}]
+
+
 def test_with_plan_renders_steps():
     from imperium.agents.code_agent import CodeAgent
 

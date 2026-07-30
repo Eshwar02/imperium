@@ -257,7 +257,11 @@ class CodeAgent(BaseAgent):
 
     @staticmethod
     def _parse_steps(raw: str) -> list[dict]:
-        """Extract the JSON array of plan steps from an LLM response; tolerant of prose/fences."""
+        """Extract the JSON array of plan steps from an LLM response.
+
+        Tolerant of prose/fences and of double-encoding — some models return an array of
+        JSON *strings* rather than objects, so each element is re-parsed when needed.
+        """
         match = re.search(r"\[.*\]", raw or "", re.DOTALL)
         if not match:
             return []
@@ -265,7 +269,16 @@ class CodeAgent(BaseAgent):
             data = json.loads(match.group())
         except (ValueError, TypeError):
             return []
-        return [s for s in data if isinstance(s, dict) and s.get("file")]
+        steps: list[dict] = []
+        for item in data if isinstance(data, list) else []:
+            if isinstance(item, str):  # double-encoded: element is a JSON object string
+                try:
+                    item = json.loads(item)
+                except (ValueError, TypeError):
+                    continue
+            if isinstance(item, dict) and item.get("file"):
+                steps.append(item)
+        return steps
 
     # ── git helpers ───────────────────────────────────────────────────────────
 
