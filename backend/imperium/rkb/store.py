@@ -20,6 +20,7 @@ from imperium.rkb.models import (
     Module,
     Repository,
     SimulationResult,
+    TestResult,
     TimelineEvent,
     TransformationPriority,
 )
@@ -340,6 +341,27 @@ def save_simulation(
 
 def get_simulations(session: Session, repository_id: str) -> list[SimulationResult]:
     return session.query(SimulationResult).filter_by(repository_id=repository_id).all()
+
+
+# ── TestResult helpers ────────────────────────────────────────────────────────
+
+def save_test_result(
+    session: Session,
+    repository_id: str,
+    phase: str,          # baseline | post_change
+    dimension: str,      # security | dataflow | load | perf | behavior
+    payload: dict,
+) -> TestResult:
+    obj = TestResult(
+        repository_id=repository_id, phase=phase, dimension=dimension, payload=payload
+    )
+    session.add(obj)
+    session.commit()
+    return obj
+
+
+def get_test_results(session: Session, repository_id: str) -> list[TestResult]:
+    return session.query(TestResult).filter_by(repository_id=repository_id).all()
 
 
 # ── TimelineEvent helpers ─────────────────────────────────────────────────────

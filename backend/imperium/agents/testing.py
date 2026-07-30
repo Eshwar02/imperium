@@ -49,6 +49,46 @@ class TestingAgent(BaseAgent):
         tests = self._write_tests(edge_cases)
         return {"edge_cases": edge_cases, "tests": tests}
 
+    def run_verification(self, ctx: AgentContext, test_command: str = "pytest -q") -> dict:
+        """Execute tests in the sandbox for baseline + post_change and persist results.
+
+        ``ctx.scratch`` may carry ``baseline_path`` / ``post_change_path`` (defaulting to
+        ``ctx.repo_path``). Runs are isolated + ephemeral (see ``sandbox.runner``);
+        results become ``TestResult`` rows the behavioral diff consumes.
+        """
+        from imperium.sandbox.runner import run as sandbox_run
+
+        phases = {
+            "baseline": ctx.scratch.get("baseline_path", ctx.repo_path),
+            "post_change": ctx.scratch.get("post_change_path", ctx.repo_path),
+        }
+        outcomes: dict[str, dict] = {}
+        for phase, path in phases.items():
+            if not path:
+                continue
+            result = sandbox_run(path, test_command, phase)
+            payload = {
+                "passed": result.ok,
+                "pass_count": result.passed,
+                "fail_count": result.failed,
+                "exit_code": result.exit_code,
+            }
+            outcomes[phase] = payload
+            self._persist_result(ctx.repository_id, phase, "behavior", payload)
+        return {"phases": outcomes}
+
+    def _persist_result(self, repository_id: str, phase: str, dimension: str, payload: dict) -> None:
+        try:
+            from imperium.rkb.store import get_session, save_test_result
+
+            session = get_session()
+            try:
+                save_test_result(session, repository_id, phase, dimension, payload)
+            finally:
+                session.close()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("persist test result failed: %s", exc)
+
     def behavioral_diff(self, ctx: AgentContext) -> dict:
         """Compare baseline vs post-change results into an itemized per-dimension report."""
         baseline, post = self._fetch_results(ctx.repository_id)
