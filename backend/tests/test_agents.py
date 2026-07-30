@@ -39,7 +39,15 @@ def test_build_tools_exposes_expected_toolset():
     from imperium.agents.tools import build_tools
 
     names = {t.name for t in build_tools(_ctx())}
-    assert names == {"search_memory", "list_business_rules", "recent_timeline", "blast_radius", "read_source"}
+    assert names == {
+        "search_memory",
+        "list_business_rules",
+        "recent_timeline",
+        "blast_radius",
+        "list_api_endpoints",
+        "list_data_access",
+        "read_source",
+    }
 
 
 def test_search_memory_tool_is_guarded_when_backend_down(monkeypatch):

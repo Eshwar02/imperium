@@ -98,6 +98,39 @@ def build_tools(ctx: AgentContext) -> list[BaseTool]:
         return "\n".join(f"- {d.get('id', d)}" for d in dependents[:40])
 
     @tool
+    def list_api_endpoints() -> str:
+        """List the API endpoints this repository exposes and consumes (the API graph)."""
+        try:
+            from imperium.rkb.graph import api_surface
+
+            graph = api_surface(repository_id)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("list_api_endpoints unavailable: %s", exc)
+            return "The API graph is unavailable."
+        endpoints = [n for n in graph.get("nodes", []) if n.get("id", "").startswith("api:")]
+        if not endpoints:
+            return "No API endpoints mapped yet."
+        return "\n".join(f"- {n.get('name', n['id'])}" for n in endpoints[:60])
+
+    @tool
+    def list_data_access() -> str:
+        """List DB tables and where the code reads/writes them (the data graph)."""
+        try:
+            from imperium.rkb.graph import data_access
+
+            graph = data_access(repository_id)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("list_data_access unavailable: %s", exc)
+            return "The data graph is unavailable."
+        edges = graph.get("edges", [])
+        if not edges:
+            return "No data-access edges mapped yet."
+        return "\n".join(
+            f"- {e['source'].removeprefix('file:')} {e['type']} {e['target'].removeprefix('table:')}"
+            for e in edges[:60]
+        )
+
+    @tool
     def read_source(relative_path: str) -> str:
         """Read a source file from the repository by its path relative to the repo root."""
         if not repo_path:
@@ -117,4 +150,12 @@ def build_tools(ctx: AgentContext) -> list[BaseTool]:
             data = data[:_MAX_FILE_BYTES] + "\n… [truncated]"
         return data
 
-    return [search_memory, list_business_rules, recent_timeline, blast_radius, read_source]
+    return [
+        search_memory,
+        list_business_rules,
+        recent_timeline,
+        blast_radius,
+        list_api_endpoints,
+        list_data_access,
+        read_source,
+    ]
