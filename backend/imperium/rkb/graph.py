@@ -113,6 +113,47 @@ def repo_graph(repository_id: str) -> dict:
         return {"nodes": nodes, "edges": edges}
 
 
+def layer_graph(repository_id: str, rel_types: list[str] | None = None) -> dict:
+    """Return the subgraph for specific relation types (a single graph *layer*).
+
+    ``rel_types`` e.g. ["CALLS"], ["EXPOSES","CONSUMES"], ["READS","WRITES"],
+    ["DEPENDS_ON"]. ``None`` returns all layers (same as ``repo_graph``).
+    """
+    if not rel_types:
+        return repo_graph(repository_id)
+    rel_pattern = "|".join(rel_types)
+    driver = _driver()
+    with driver.session() as session:
+        edges_res = session.run(
+            f"""
+            MATCH (a {{repository_id: $rid}})-[r:{rel_pattern}]->(b {{repository_id: $rid}})
+            RETURN a.id AS source, b.id AS target, type(r) AS type
+            """,
+            rid=repository_id,
+        )
+        edges = [dict(record) for record in edges_res]
+        node_ids = {e["source"] for e in edges} | {e["target"] for e in edges}
+        nodes: list[dict] = []
+        if node_ids:
+            nodes_res = session.run(
+                "MATCH (n {repository_id: $rid}) WHERE n.id IN $ids RETURN n",
+                rid=repository_id,
+                ids=list(node_ids),
+            )
+            nodes = [dict(record["n"]) for record in nodes_res]
+        return {"nodes": nodes, "edges": edges}
+
+
+def api_surface(repository_id: str) -> dict:
+    """The API graph layer: EXPOSES + CONSUMES edges between files and endpoints."""
+    return layer_graph(repository_id, ["EXPOSES", "CONSUMES"])
+
+
+def data_access(repository_id: str) -> dict:
+    """The data graph layer: READS + WRITES edges between files and tables."""
+    return layer_graph(repository_id, ["READS", "WRITES"])
+
+
 def ping() -> dict[str, str]:
     try:
         _driver().verify_connectivity()

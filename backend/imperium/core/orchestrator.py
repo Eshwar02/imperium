@@ -96,6 +96,15 @@ class Orchestrator:
             log.warning("Call graph build failed: %s", exc)
             graph = {"nodes": [], "edges": []}
 
+        # 2b. Build API + data + dependency graph layers → Neo4j
+        try:
+            from imperium.intelligence.multigraph import build_multigraph
+
+            mg = build_multigraph(repository_id, repo_path, write=True)
+            results["multigraph"] = mg["counts"]
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Multigraph build failed: %s", exc)
+
         # 3. Build timeline → Postgres + Qdrant
         try:
             from imperium.intelligence.timeline import build_timeline
