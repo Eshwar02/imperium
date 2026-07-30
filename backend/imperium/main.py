@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from imperium import __version__
-from imperium.api.routes import analysis, gates, health, ingest, insights, runs
+from imperium.api.routes import analysis, code, gates, health, ingest, insights, runs
 
 app = FastAPI(
     title="Imperium API",
@@ -26,6 +26,7 @@ app.include_router(analysis.router, prefix="/api")
 app.include_router(gates.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(insights.router, prefix="/api")
+app.include_router(code.router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])
