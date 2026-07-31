@@ -240,6 +240,27 @@ three-column: controls · output · "Process — what & why"), driven entirely b
 CodeAgent SSE stream below — port that dashboard into the IDE's right dock / Agent
 Activity panel.
 
+### 7b. Agent graph — live task decomposition
+
+Beside the linear "what & why" feed, render a **live node graph** of the agent run so a
+viewer sees *how the work is decomposed*, not just a scrolling log:
+
+- **Root node** = the active agent (e.g. `CodeAgent`) with its current task.
+- **Child nodes** = the sub-tasks it split the work into — for the CodeAgent these are
+  the **plan steps** (one per file: `{file, action}`). In the full orchestrator these
+  are the fan-out sub-agents (comprehension / security / testing / …) over the module
+  hierarchy.
+- **Current work** = the active child shows its live tool (`▶ editing` / `▶ writing` /
+  grep / read), with the connecting edge highlighted.
+- **Status encoding** = idle / active (pulsing, amber) / done (green ✓); the graph
+  updates on every `plan` and `tool_call` event and settles green on `done`.
+
+The harness renderer is **dependency-free SVG** (no graph lib, no extra fetches) — a
+root-to-children tree with curved edges that reflows by panel width. In the production
+IDE this is the same data shaped for the Graph Viewer engine (React Flow), and for real
+multi-agent runs it is fed by the run SSE (`node`/`delta` events in
+`GET /api/runs/:id/events`) rather than the single-agent code stream.
+
 **Backend (shipped):** the CodeAgent coding endpoints already emit exactly the events
 this dashboard consumes:
 - `POST /api/code/:id/plan` → `{steps:[{file, action, rationale}], summary}` (the "why").
