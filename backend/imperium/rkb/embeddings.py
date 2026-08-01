@@ -24,7 +24,9 @@ _VECTOR_SIZE = 1536  # text-embedding-3-small / compatible
 def _client():
     from qdrant_client import QdrantClient
 
-    return QdrantClient(url=get_settings().qdrant_url)
+    # check_compatibility=False silences the client/server version-skew UserWarning;
+    # the REST API we use is stable across these versions.
+    return QdrantClient(url=get_settings().qdrant_url, check_compatibility=False)
 
 
 def _ensure_collection() -> None:
