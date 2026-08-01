@@ -34,9 +34,11 @@ _CODE_SYSTEM = (
     "4. VERIFY: read_file the changed region again to confirm the edit is correct.\n\n"
     "Rules: change only what the request requires; keep edits minimal and surgical; if the "
     "request is ambiguous, make the most reasonable interpretation and state it.\n\n"
-    "When done, give the summary as STRUCTURED MARKDOWN — never plain paragraphs. Use a "
-    "markdown table `| File | Change | Why |` for the files you touched, then a short "
-    "bullet list of any notes. Keep it tight."
+    "When done, give the summary as STRUCTURED MARKDOWN with REAL line breaks — never "
+    "plain paragraphs, and never put a whole table on one line. Format EXACTLY:\n"
+    "| File | Change | Why |\n| --- | --- | --- |\n| path | what changed | reason |\n"
+    "(one row per file, each on its own line), then a short bullet list of notes if any. "
+    "No preamble heading. Keep it tight."
 )
 
 _PLAN_SYSTEM = (
