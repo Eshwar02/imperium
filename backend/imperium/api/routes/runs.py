@@ -5,10 +5,13 @@ long-lived, resumable across the human gates, and stream progress over SSE — s
 premium IDE frontend can attach, watch agents work, and approve gates in place.
 
 Routes:
-  POST /api/runs                      → start a run (drives to the first gate in the bg)
-  GET  /api/runs/{run_id}             → status / stage / progress / pending gate
-  POST /api/runs/{run_id}/resume      → submit gate votes; resume to the next stop
-  GET  /api/runs/{run_id}/events      → SSE stream of run events
+  POST   /api/runs                    → start a run (drives to the first gate in the bg)
+  GET    /api/runs                    → list runs (status / stage / gate; no event log)
+  GET    /api/runs/{run_id}           → status / stage / progress / pending gate
+  GET    /api/runs/{run_id}/graph     → live agent node graph ({nodes, edges}, §7b)
+  POST   /api/runs/{run_id}/resume    → submit gate votes; resume to the next stop
+  GET    /api/runs/{run_id}/events    → SSE stream of run events
+  DELETE /api/runs/{run_id}           → delete a run (its live graph is deletable)
 """
 from __future__ import annotations
 
@@ -41,12 +44,37 @@ def start_run(req: StartRunRequest, background: BackgroundTasks) -> dict:
     return {"run_id": run_id, "status": "running"}
 
 
+@router.get("/runs")
+def list_runs() -> dict:
+    """List all known runs (status / stage / pending gate), newest fields only."""
+    return {"runs": run_manager.list_runs()}
+
+
 @router.get("/runs/{run_id}")
 def get_run(run_id: str) -> dict:
     try:
         return run_manager.get_run(run_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="run not found")
+
+
+@router.get("/runs/{run_id}/graph")
+def get_run_graph(run_id: str) -> dict:
+    """The run's live execution as a node graph: {run_id, status, stage, nodes, edges}."""
+    try:
+        return run_manager.agent_graph(run_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="run not found")
+
+
+@router.delete("/runs/{run_id}")
+def delete_run(run_id: str) -> dict:
+    """Delete a run and its live graph."""
+    try:
+        run_manager.delete(run_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {"run_id": run_id, "status": "deleted"}
 
 
 @router.post("/runs/{run_id}/resume")

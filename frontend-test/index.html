@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Imperium — test console</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#30363d;
+    --fg:#e6edf3; --muted:#8b949e; --accent:#4493f8;
+    --idle:#6e7681; --active:#d29922; --done:#3fb950; --failed:#f85149; --awaiting:#4493f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);color:var(--fg)}
+  header{display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  header input{background:var(--panel2);border:1px solid var(--border);color:var(--fg);padding:5px 8px;border-radius:6px;font:inherit}
+  header input#backend{width:200px} header input#repo{width:150px} header input#repopath{width:240px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--idle);display:inline-block}
+  .dot.ok{background:var(--done)} .dot.bad{background:var(--failed)}
+  nav{display:flex;gap:4px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:5px 12px;border-radius:6px;cursor:pointer;font:inherit}
+  nav button.active{background:var(--panel2);color:var(--fg);border-color:var(--border)}
+  main{padding:12px}
+  .tab{display:none} .tab.active{display:block}
+  button.act{background:var(--accent);border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+  button.ghost{background:var(--panel2);border:1px solid var(--border);color:var(--fg);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+  button.danger{background:#3d1418;border:1px solid var(--failed);color:var(--failed)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .cols{display:grid;grid-template-columns:280px 1fr;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px}
+  .card h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  pre{background:#0a0d12;border:1px solid var(--border);border-radius:6px;padding:10px;overflow:auto;max-height:420px;white-space:pre-wrap;word-break:break-word;margin:0}
+  textarea,select{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--fg);padding:6px 8px;border-radius:6px;font:inherit}
+  label{display:block;color:var(--muted);margin:6px 0 2px}
+  ul.runs{list-style:none;margin:0;padding:0;max-height:520px;overflow:auto}
+  ul.runs li{padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;cursor:pointer;background:var(--panel2)}
+  ul.runs li.sel{border-color:var(--accent)}
+  .badge{font-size:11px;padding:1px 6px;border-radius:10px;border:1px solid var(--border)}
+  .b-running{color:var(--active)} .b-awaiting_gate{color:var(--awaiting)} .b-complete{color:var(--done)} .b-failed{color:var(--failed)}
+  svg{width:100%;height:520px;background:#0a0d12;border:1px solid var(--border);border-radius:8px}
+  .legend span{margin-right:14px;color:var(--muted)}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .pulse{animation:pulse 1.1s infinite}
+  small.hint{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <b>⚔ Imperium</b>
+  <input id="backend" value="http://localhost:8000" />
+  <input id="repo" placeholder="repository_id" value="r1" />
+  <input id="repopath" placeholder="repo_path (abs)" />
+  <span class="dot" id="health"></span><small class="hint" id="healthtxt">health?</small>
+</header>
+
+<nav id="nav"></nav>
+
+<main>
+  <!-- RUNS + AGENT GRAPH -->
+  <section class="tab active" data-tab="runs">
+    <div class="row">
+      <button class="act" onclick="startRun()">▶ Start run</button>
+      <button class="ghost" onclick="loadRuns()">⟳ Refresh list</button>
+      <span id="runmsg" class="hint"></span>
+    </div>
+    <div class="cols">
+      <div>
+        <div class="card"><h3>Runs</h3><ul class="runs" id="runlist"></ul></div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Agent graph <span id="graphstatus" class="hint"></span></h3>
+          <div class="legend" style="margin-bottom:6px">
+            <span><i class="sw" style="background:var(--idle)"></i>idle</span>
+            <span><i class="sw" style="background:var(--active)"></i>active</span>
+            <span><i class="sw" style="background:var(--awaiting)"></i>awaiting</span>
+            <span><i class="sw" style="background:var(--done)"></i>done</span>
+            <span><i class="sw" style="background:var(--failed)"></i>failed</span>
+          </div>
+          <svg id="graph" viewBox="0 0 900 520"></svg>
+        </div>
+        <div class="card">
+          <h3>Gate resume</h3>
+          <div class="row">
+            <input id="votes" style="flex:1;background:var(--panel2);border:1px solid var(--border);color:var(--fg);padding:6px;border-radius:6px" value='{"security":"approve"}' />
+            <button class="ghost" onclick="resumeRun()">Resume gate</button>
+            <button class="danger" onclick="delRun()">Delete run</button>
+          </div>
+        </div>
+        <div class="card"><h3>Live events</h3><pre id="events"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INGEST + ANALYSIS -->
+  <section class="tab" data-tab="pipeline">
+    <div class="row">
+      <button class="act" onclick="call('POST','/api/ingest',{repository_id:repo(),repo_path:repopath()},'pipeout')">Ingest</button>
+      <button class="ghost" onclick="call('POST','/api/analysis/'+repo(),{},'pipeout')">Run analysis</button>
+      <button class="ghost" onclick="call('GET','/api/analysis/'+repo(),null,'pipeout')">Get analysis</button>
+    </div>
+    <div class="card"><h3>Result</h3><pre id="pipeout"></pre></div>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section class="tab" data-tab="insights">
+    <div class="row" id="insightbtns"></div>
+    <div class="row">
+      <label style="margin:0">layer</label>
+      <select id="layer" style="width:auto"><option>all</option><option>call</option><option>dependency</option><option>api</option><option>data</option><option>arch</option></select>
+      <input id="nodeid" placeholder="node id (blast)" style="background:var(--panel2);border:1px solid var(--border);color:var(--fg);padding:6px;border-radius:6px" />
+    </div>
+    <div class="card"><h3>Result</h3><pre id="insout"></pre></div>
+  </section>
+
+  <!-- GATES -->
+  <section class="tab" data-tab="gates">
+    <div class="row">
+      <button class="ghost" onclick="call('GET','/api/clarifications/'+repo(),null,'gateout')">Clarifications</button>
+      <button class="ghost" onclick="call('GET','/api/decisions/'+repo(),null,'gateout')">Decisions</button>
+    </div>
+    <label>Gate A / B body (JSON)</label>
+    <textarea id="gatebody" rows="4">{"repository_id":"r1","votes":{"security":"approve"}}</textarea>
+    <div class="row" style="margin-top:6px">
+      <button class="act" onclick="call('POST','/api/gate-a',JSON.parse(gv('gatebody')),'gateout')">POST gate-a</button>
+      <button class="act" onclick="call('POST','/api/gate-b',JSON.parse(gv('gatebody')),'gateout')">POST gate-b</button>
+    </div>
+    <div class="card" style="margin-top:10px"><h3>Result</h3><pre id="gateout"></pre></div>
+  </section>
+
+  <!-- CODE AGENT -->
+  <section class="tab" data-tab="code">
+    <label>instruction</label>
+    <textarea id="instr" rows="3">Add a docstring to the main function.</textarea>
+    <div class="row" style="margin-top:6px">
+      <label style="margin:0"><input type="checkbox" id="doplan" checked> plan first</label>
+      <input id="testcmd" placeholder="test_command e.g. pytest -q" style="background:var(--panel2);border:1px solid var(--border);color:var(--fg);padding:6px;border-radius:6px" />
+      <button class="ghost" onclick="codePlan()">Plan</button>
+      <button class="act" onclick="codeStream()">Run (stream)</button>
+    </div>
+    <div class="cols" style="margin-top:10px">
+      <div class="card"><h3>Live tool-calls</h3><pre id="codeevents"></pre></div>
+      <div class="card"><h3>Plan / result</h3><pre id="codeout"></pre></div>
+    </div>
+  </section>
+
+  <!-- HEALTH / USAGE -->
+  <section class="tab" data-tab="system">
+    <div class="row">
+      <button class="ghost" onclick="call('GET','/health',null,'sysout')">/health</button>
+      <button class="ghost" onclick="call('GET','/health/services',null,'sysout')">services</button>
+      <button class="ghost" onclick="call('GET','/health/incidents',null,'sysout')">incidents</button>
+      <button class="ghost" onclick="call('GET','/api/usage',null,'sysout')">token usage</button>
+    </div>
+    <div class="card"><h3>Result</h3><pre id="sysout"></pre></div>
+  </section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const gv=id=>$(id).value;
+const backend=()=>gv('backend').replace(/\/$/,'');
+const repo=()=>gv('repo').trim();
+const repopath=()=>gv('repopath').trim();
+
+// ── tabs ──
+const TABS=[['runs','Runs · Agent graph'],['pipeline','Ingest · Analysis'],['insights','Insights'],['gates','Gates'],['code','Code agent'],['system','Health · Usage']];
+$('nav').innerHTML=TABS.map((t,i)=>`<button class="${i===0?'active':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
+$('nav').onclick=e=>{const t=e.target.dataset.t;if(!t)return;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
+  document.querySelectorAll('.tab').forEach(s=>s.classList.toggle('active',s.dataset.tab===t));};
+
+// ── generic api ──
+async function api(method,path,body){
+  const opt={method,headers:{}};
+  if(body!=null){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body);}
+  const r=await fetch(backend()+path,opt);
+  const txt=await r.text();
+  let data;try{data=JSON.parse(txt);}catch{data=txt;}
+  return {ok:r.ok,status:r.status,data};
+}
+async function call(method,path,body,outId){
+  $(outId).textContent='…';
+  try{const r=await api(method,path,body);
+    $(outId).textContent=(r.ok?'':`HTTP ${r.status}\n`)+JSON.stringify(r.data,null,2);
+  }catch(e){$(outId).textContent='ERR '+e;}
+}
+
+// ── health ──
+async function health(){
+  try{const r=await api('GET','/health');
+    $('health').className='dot '+(r.ok?'ok':'bad');
+    $('healthtxt').textContent=r.ok?'online':'offline';
+  }catch{$('health').className='dot bad';$('healthtxt').textContent='offline';}
+}
+
+// ── insights buttons ──
+const INS=[['/graph/','graph (layer)',true],['/graph/','blast',false],['/hierarchy/','hierarchy'],['/business-rules/','business-rules'],['/priorities/','priorities'],['/changesets/','changesets'],['/simulations/','simulations'],['/timeline/','timeline']];
+$('insightbtns').innerHTML=INS.map((x,i)=>`<button class="ghost" data-i="${i}">${x[1]}</button>`).join('');
+$('insightbtns').onclick=e=>{const i=e.target.dataset.i;if(i==null)return;const x=INS[i];
+  let p;
+  if(x[1]==='graph (layer)')p='/api/graph/'+repo()+'?layer='+gv('layer');
+  else if(x[1]==='blast')p='/api/graph/'+repo()+'/blast/'+encodeURIComponent(gv('nodeid')||'x');
+  else p='/api'+x[0]+repo();
+  call('GET',p,null,'insout');};
+
+// ── RUNS ──
+let SEL=null, ES=null;
+async function startRun(){
+  const r=await api('POST','/api/runs',{repository_id:repo(),repo_path:repopath()});
+  $('runmsg').textContent=r.ok?('started '+r.data.run_id):('err '+r.status);
+  await loadRuns(); if(r.ok) select(r.data.run_id);
+}
+async function loadRuns(){
+  const r=await api('GET','/api/runs');
+  const runs=(r.data&&r.data.runs)||[];
+  $('runlist').innerHTML=runs.length?runs.map(x=>`
+    <li data-id="${x.run_id}" class="${x.run_id===SEL?'sel':''}">
+      <div class="badge b-${x.status}">${x.status}</div>
+      <div>${x.run_id.slice(0,12)}…</div>
+      <small class="hint">stage: ${x.stage||'-'} ${x.pending?('· gate '+(x.pending.gate||'')):''}</small>
+    </li>`).join(''):'<small class="hint">no runs — Start run</small>';
+  $('runlist').querySelectorAll('li').forEach(li=>li.onclick=()=>select(li.dataset.id));
+}
+function select(id){
+  SEL=id; loadRuns(); refreshGraph();
+  if(ES){ES.close();ES=null;} $('events').textContent='';
+  ES=new EventSource(backend()+'/api/runs/'+id+'/events');
+  ES.onmessage=e=>{$('events').textContent+=e.data+'\n';
+    $('events').scrollTop=$('events').scrollHeight;
+    refreshGraph();
+    if(/"(complete|failed)"/.test(e.data)){ES.close();ES=null;loadRuns();}
+  };
+  ES.onerror=()=>{if(ES){ES.close();ES=null;}};
+}
+async function resumeRun(){
+  if(!SEL)return alert('select a run');
+  let votes;try{votes=JSON.parse(gv('votes'));}catch{return alert('votes must be JSON');}
+  await api('POST','/api/runs/'+SEL+'/resume',{votes});
+  setTimeout(()=>{refreshGraph();loadRuns();},400);
+}
+async function delRun(){
+  if(!SEL)return alert('select a run');
+  if(!confirm('Delete run '+SEL+'?'))return;
+  await api('DELETE','/api/runs/'+SEL);
+  if(ES){ES.close();ES=null;} SEL=null; $('events').textContent=''; $('graph').innerHTML='';
+  $('graphstatus').textContent=''; loadRuns();
+}
+async function refreshGraph(){
+  if(!SEL)return;
+  const r=await api('GET','/api/runs/'+SEL+'/graph');
+  if(!r.ok){$('graphstatus').textContent='(gone)';return;}
+  $('graphstatus').textContent='· '+r.data.status+' · '+r.data.stage;
+  drawGraph(r.data);
+}
+
+// ── SVG node-graph renderer (dependency-free) ──
+const COLOR={idle:'#6e7681',active:'#d29922',awaiting:'#4493f8',done:'#3fb950',failed:'#f85149'};
+function drawGraph(g){
+  const svg=$('graph'); const W=900;
+  const byId={}; g.nodes.forEach(n=>byId[n.id]=n);
+  const root=g.nodes.find(n=>n.type==='run');
+  const stages=g.nodes.filter(n=>n.parent==='run');
+  const agents=g.nodes.filter(n=>n.type==='agent');
+  const H=Math.max(520, stages.length*70, agents.length*70);
+  const pos={};
+  const colX={0:60,1:340,2:640};
+  // root
+  pos[root.id]={x:colX[0],y:H/2};
+  // stages spread vertically
+  const sGap=H/(stages.length+1);
+  stages.forEach((n,i)=>pos[n.id]={x:colX[1],y:sGap*(i+1)});
+  // agents spread near their analyze parent column
+  const aGap=H/(agents.length+1);
+  agents.forEach((n,i)=>pos[n.id]={x:colX[2],y:aGap*(i+1)});
+
+  let edges='',nodes='';
+  g.edges.filter(e=>e.kind==='contains').forEach(e=>{
+    const a=pos[e.source],b=pos[e.target]; if(!a||!b)return;
+    const mx=(a.x+b.x)/2;
+    edges+=`<path d="M ${a.x+70} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x-8} ${b.y}" fill="none" stroke="#30363d" stroke-width="1.5"/>`;
+  });
+  g.nodes.forEach(n=>{
+    const p=pos[n.id]; if(!p)return;
+    const c=COLOR[n.status]||COLOR.idle;
+    const w=n.type==='agent'?150:150, h=34;
+    const pulse=(n.status==='active'||n.status==='awaiting')?'pulse':'';
+    nodes+=`<g class="${pulse}">
+      <rect x="${p.x-4}" y="${p.y-h/2}" width="${n.type==='run'?90:w}" height="${h}" rx="8"
+        fill="#161b22" stroke="${c}" stroke-width="2"/>
+      <circle cx="${p.x+6}" cy="${p.y}" r="4" fill="${c}"/>
+      <text x="${p.x+18}" y="${p.y-2}" fill="#e6edf3" font-size="12">${esc(n.label)}</text>
+      <text x="${p.x+18}" y="${p.y+11}" fill="#8b949e" font-size="9">${n.type} · ${n.status}</text>
+    </g>`;
+  });
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=edges+nodes;
+}
+function esc(s){return String(s).replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));}
+
+// ── CODE AGENT ──
+async function codePlan(){
+  $('codeout').textContent='…';
+  const r=await api('POST','/api/code/'+repo()+'/plan',{instruction:gv('instr'),repo_path:repopath()});
+  $('codeout').textContent=JSON.stringify(r.data,null,2);
+}
+function codeStream(){
+  $('codeevents').textContent=''; $('codeout').textContent='streaming…';
+  fetch(backend()+'/api/code/'+repo()+'/stream',{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({instruction:gv('instr'),repo_path:repopath(),plan:$('doplan').checked,test_command:gv('testcmd')||null})
+  }).then(async res=>{
+    const rd=res.body.getReader();const dec=new TextDecoder();let buf='';
+    while(true){const {done,value}=await rd.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let i;while((i=buf.indexOf('\n\n'))>=0){
+        const line=buf.slice(0,i);buf=buf.slice(i+2);
+        const m=line.match(/^data: (.*)$/s);if(!m)continue;
+        let ev;try{ev=JSON.parse(m[1]);}catch{continue;}
+        $('codeevents').textContent+=(ev.type||ev.event||'?')+' '+JSON.stringify(ev).slice(0,200)+'\n';
+        $('codeevents').scrollTop=$('codeevents').scrollHeight;
+        if(ev.type==='done'||ev.type==='plan')$('codeout').textContent=JSON.stringify(ev,null,2);
+      }
+    }
+  }).catch(e=>$('codeout').textContent='ERR '+e);
+}
+
+// ── boot ──
+health(); setInterval(health,5000); loadRuns();
+</script>
+</body>
+</html>

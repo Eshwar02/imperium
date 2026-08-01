@@ -22,6 +22,7 @@ ROUTING: dict[str, list[str]] = {
     "comprehension": ["cerebras"],
     "healing": ["groq", "cerebras"],  # fast, cheap diagnosis of system faults
     "coding": ["groq", "nemotron", "mistral"],  # Claude-Code-style locate+edit agent loop
+    "graph": ["cerebras", "groq"],  # small, cheap model: lay out the agent graph (edges)
 }
 
 

@@ -164,9 +164,27 @@ class Orchestrator:
         all_findings: list[dict] = []
         structure_map: dict | None = None
 
+        from imperium.core.run_events import emit, run_context
+
+        def _run_named(name, agent):
+            # Emit live start/done inside the worker so the copied context's emitter
+            # (bound to the active run) reaches the run's event log.
+            emit({"event": "agent_start", "agent": name})
+            result = self._run_agent_safe(agent, ctx)
+            emit(
+                {
+                    "event": "agent_done",
+                    "agent": name,
+                    "findings": len(result.get("findings", [])),
+                }
+            )
+            return result
+
         with ThreadPoolExecutor(max_workers=4) as pool:
+            # copy_context() per submit so the run emitter (a contextvar) is visible
+            # in the pool threads — contextvars do not cross threads on their own.
             futures = {
-                pool.submit(self._run_agent_safe, agent, ctx): name
+                pool.submit(run_context().run, _run_named, name, agent): name
                 for name, agent in agents
             }
             for future in as_completed(futures):
@@ -177,6 +195,7 @@ class Orchestrator:
                         structure_map = result["structure_map"]
                     all_findings.extend(result.get("findings", []))
                 except Exception as exc:  # noqa: BLE001
+                    emit({"event": "agent_error", "agent": name, "error": str(exc)[:200]})
                     log.warning("Agent %s failed: %s", name, exc)
 
         # Persist findings to RKB

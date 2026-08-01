@@ -33,8 +33,10 @@ _CODE_SYSTEM = (
     "for new files. Preserve existing style and behavior not in scope.\n"
     "4. VERIFY: read_file the changed region again to confirm the edit is correct.\n\n"
     "Rules: change only what the request requires; keep edits minimal and surgical; if the "
-    "request is ambiguous, make the most reasonable interpretation and state it. When done, "
-    "give a short summary of exactly what you changed and why."
+    "request is ambiguous, make the most reasonable interpretation and state it.\n\n"
+    "When done, give the summary as STRUCTURED MARKDOWN — never plain paragraphs. Use a "
+    "markdown table `| File | Change | Why |` for the files you touched, then a short "
+    "bullet list of any notes. Keep it tight."
 )
 
 _PLAN_SYSTEM = (

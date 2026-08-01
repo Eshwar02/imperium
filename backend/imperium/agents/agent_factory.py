@@ -11,11 +11,23 @@ Agents built here keep the ``BaseAgent.run(ctx)`` contract: callers invoke via
 from __future__ import annotations
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelFallbackMiddleware
+from langchain.agents.middleware import (
+    ContextEditingMiddleware,
+    ModelCallLimitMiddleware,
+    ModelFallbackMiddleware,
+)
+from langchain.agents.middleware.context_editing import ClearToolUsesEdit
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
 from imperium.llm.factory import models_for
+
+# Keep a tool-using loop from snowballing past a provider's context window on large
+# repos: prune old tool results once the input grows big, and hard-cap the reason→act
+# loop so a broad task terminates instead of running forever.
+_CONTEXT_TRIGGER_TOKENS = 120_000  # well under the smallest provider window (256k)
+_KEEP_RECENT_TOOL_RESULTS = 3
+_MAX_MODEL_CALLS = 40
 
 
 def agent_model_chain(role: str, temperature: float = 0.2) -> tuple[ChatOpenAI, list[ChatOpenAI]]:
@@ -38,7 +50,17 @@ def build_agent(
 ):
     """Create a tool-using agent for ``role`` with fallback middleware over its chain."""
     primary, fallbacks = agent_model_chain(role, temperature)
-    middleware = [ModelFallbackMiddleware(*fallbacks)] if fallbacks else []
+    middleware = [
+        ContextEditingMiddleware(
+            edits=[ClearToolUsesEdit(
+                trigger=_CONTEXT_TRIGGER_TOKENS,
+                keep=_KEEP_RECENT_TOOL_RESULTS,
+            )]
+        ),
+        ModelCallLimitMiddleware(run_limit=_MAX_MODEL_CALLS, exit_behavior="end"),
+    ]
+    if fallbacks:
+        middleware.append(ModelFallbackMiddleware(*fallbacks))
     return create_agent(
         model=primary,
         tools=tools,

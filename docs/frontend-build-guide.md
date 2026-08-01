@@ -261,6 +261,49 @@ IDE this is the same data shaped for the Graph Viewer engine (React Flow), and f
 multi-agent runs it is fed by the run SSE (`node`/`delta` events in
 `GET /api/runs/:id/events`) rather than the single-agent code stream.
 
+**Backend (shipped, full orchestrator run):** the run node graph is now a first-class,
+derived-and-deletable resource — no need to reconstruct topology from the raw event log:
+- `GET /api/runs/:id/graph` → `{run_id, status, stage, nodes, edges}`. Nodes carry
+  `{id, label, type, parent, status, detail}` where `type ∈ run|stage|gate|agent` and
+  `status ∈ idle|active|done|failed|awaiting`. Topology: `run` → the 6 pipeline stages
+  (`build_kb → analyze → gate_a → simulate → gate_b → finalize`), and `analyze` fans out
+  to the real sub-agents (`structure`, `business_logic`, `security`, `research`). Edges
+  are `contains` (tree) + `next` (pipeline flow) so the renderer can draw either.
+- Live status is **real**: pipeline stages settle from the LangGraph `{node, delta}`
+  updates, and the analyze sub-agents push `agent_start` / `agent_done` / `agent_error`
+  events (over the same `GET /api/runs/:id/events` SSE) as they run in parallel — so the
+  active sub-agent pulses amber and settles green with no mock timers. Poll
+  `/graph` on each SSE tick, or rebuild client-side from the events.
+- `GET /api/runs` lists runs; `DELETE /api/runs/:id` removes a run **and its graph**
+  (the "deletable" node graph); both `GET /api/runs/:id/graph` and `DELETE` return 404
+  once gone.
+
+**Interaction model — draggable & pannable (Supabase-style).** The graph is not a static
+diagram: render it as a **movable canvas** like Supabase's project/server map — a dotted
+background, **nodes you drag to rearrange**, and **drag-empty-space to pan** (wheel to
+zoom in the production engine). React Flow gives this for free (`nodesDraggable`, `Panel`,
+`Background variant="dots"`, `Controls`, `MiniMap`); the throwaway harness implements the
+same with pointer events over an SVG `<g transform>` and per-node `{x,y}` state. Edges are
+**dashed** and the active edge "flows" (marching-ants via animated `stroke-dashoffset`) so
+you can see which path is live.
+
+**Small low-cost "graph agent" for edges (shipped).** Topology is cheap, but *which
+sub-task depends on which* is a judgement call, so a dedicated tiny agent
+(`agents/graph_agent.py`, routed to the cheapest models via the new `graph` role —
+`cerebras → groq`) infers the **dependency edges** between plan steps and returns
+`{nodes, edges}` (edges tagged `kind: contains|depends`, `style: "dashed"`). It is one
+non-tool completion with a strict-JSON contract and a deterministic linear fallback, so
+the graph always renders even with no key. Endpoint: `POST /api/code/:id/graph`
+(`{instruction, repo_path, steps?}` — supply `steps` to skip re-planning). Use this same
+low-tier-model-draws-the-graph pattern in the main IDE's Graph Viewer, and for the full
+orchestrator run reuse the deterministic `/api/runs/:id/graph` topology.
+
+**Summaries render as structured markdown, not raw text.** Agent summaries come back as
+markdown (the CodeAgent is instructed to answer with a `| File | Change | Why |` table +
+bullet notes, never paragraphs). Render markdown → HTML (tables/lists/`code`/bold), and
+render the plan itself as a **table** (`# · File · Action · Why`) rather than a prose
+block. Never dump `**bold**` / raw `|` pipes to the user.
+
 **Backend (shipped):** the CodeAgent coding endpoints already emit exactly the events
 this dashboard consumes:
 - `POST /api/code/:id/plan` → `{steps:[{file, action, rationale}], summary}` (the "why").

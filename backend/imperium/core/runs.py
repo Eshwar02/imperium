@@ -81,10 +81,36 @@ class RunManager:
             run = self._runs.get(run_id)
             return list(run["events"]) if run else []
 
+    def list_runs(self) -> list[dict]:
+        """Summaries of every known run (newest fields, no event log)."""
+        with self._lock:
+            return [
+                {k: v for k, v in run.items() if k != "events"} | {"run_id": rid}
+                for rid, run in self._runs.items()
+            ]
+
+    def delete(self, run_id: str) -> None:
+        """Forget a run entirely (its live node graph becomes deletable)."""
+        with self._lock:
+            if run_id not in self._runs:
+                raise KeyError(run_id)
+            del self._runs[run_id]
+
+    def agent_graph(self, run_id: str) -> dict:
+        """The run's live execution as a ``{nodes, edges}`` agent graph."""
+        from imperium.core.agent_graph import build_agent_graph
+
+        run = self.get_run(run_id)  # raises KeyError if unknown
+        return build_agent_graph(self.get_events(run_id), run)
+
     # ── internal ──────────────────────────────────────────────────────────────
 
     def _drive(self, run_id: str, graph_input: Any) -> None:
+        from imperium.core.run_events import reset_emitter, set_emitter
+
         config = {"configurable": {"thread_id": run_id}}
+        # Bind this run's event sink so deep sub-agents can push live progress.
+        token = set_emitter(lambda ev: self._emit(run_id, ev))
         try:
             for update in self.graph.stream(graph_input, config, stream_mode="updates"):
                 for node, delta in (update or {}).items():
@@ -93,6 +119,8 @@ class RunManager:
             self._set(run_id, status="failed", pending={"error": str(exc)[:300]})
             log.warning("Run %s failed: %s", run_id, exc)
             return
+        finally:
+            reset_emitter(token)
         self._sync_state(run_id, config)
 
     def _sync_state(self, run_id: str, config: dict) -> None:

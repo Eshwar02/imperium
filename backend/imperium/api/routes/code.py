@@ -29,6 +29,7 @@ class CodeRequest(BaseModel):
     plan: bool = True
     test_command: str | None = None
     max_test_iters: int = 2
+    steps: list[dict] | None = None  # optional pre-computed plan steps (for /graph)
 
 
 def _resolve_repo_path(repository_id: str, repo_path: str) -> str:
@@ -76,6 +77,24 @@ def code_plan(repository_id: str, req: CodeRequest) -> dict:
         req.instruction,
         default={"steps": [], "summary": "planning failed"},
     )
+
+
+@router.post("/code/{repository_id}/graph")
+def code_graph(repository_id: str, req: CodeRequest) -> dict:
+    """Lay out the task as a node graph via the small ``graph`` agent (dashed dep edges).
+
+    Uses ``req.steps`` if provided; otherwise plans first. Returns ``{nodes, edges}``.
+    """
+    from imperium.agents.graph_agent import GraphAgent
+    from imperium.core.healing import heal_call
+
+    def _run():
+        steps = req.steps
+        if steps is None:
+            steps = CodeAgent().plan_task(_ctx(repository_id, req), req.instruction).get("steps", [])
+        return GraphAgent().layout(steps)
+
+    return heal_call("api.code.graph", _run, default={"nodes": [], "edges": []})
 
 
 @router.post("/code/{repository_id}/stream")
