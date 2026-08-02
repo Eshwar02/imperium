@@ -1,0 +1,37 @@
+name: Deploy backend to Azure
+
+# Build the backend image and deploy it to Azure Container Apps on every push to
+# main (after CI passes). App SECRETS (DB URLs, API keys) are NOT set here — they live
+# on the Container App itself (set once via the az CLI / portal), so they never touch
+# CI logs. This workflow only ships new code.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    # Only deploy if CI succeeded (or when triggered manually).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build image in ACR and deploy to Container Apps
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}/backend
+          dockerfilePath: Dockerfile
+          acrName: ${{ vars.ACR_NAME }}
+          containerAppName: ${{ vars.CONTAINERAPP_NAME }}
+          resourceGroup: ${{ vars.AZURE_RESOURCE_GROUP }}
+          targetPort: "8000"
+          ingress: external
