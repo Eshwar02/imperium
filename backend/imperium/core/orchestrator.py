@@ -29,6 +29,13 @@ from imperium.api.schemas import AnalysisResponse, Category, Finding, GateDecisi
 
 log = logging.getLogger("imperium.core.orchestrator")
 
+# Latest completed analysis per repository, so GET /analysis can return the real
+# result without re-running the pipeline. Process-local by design: analyses are
+# also durably reflected in the RKB (business rules) as a fallback across restarts.
+_ANALYSIS_SNAPSHOTS: dict[str, AnalysisResponse] = {}
+# Repositories whose analysis is currently running in a background task.
+_ANALYSIS_RUNNING: set[str] = set()
+
 
 class Orchestrator:
     """Coordinates the multi-agent pipeline (PRD §7 Steps 1-16)."""
@@ -214,15 +221,36 @@ class Orchestrator:
             if f.get("title")
         ]
 
-        return AnalysisResponse(
+        response = AnalysisResponse(
             repository_id=repository_id,
             status="complete",
             structure_map=structure_map,
             findings=findings,
         )
+        # Cache the full snapshot so GET /analysis returns it without re-running.
+        _ANALYSIS_SNAPSHOTS[repository_id] = response
+        _ANALYSIS_RUNNING.discard(repository_id)
+        return response
+
+    def analyze_in_background(self, repository_id: str) -> None:
+        """Run analyze() as a background task, tracking running state and errors."""
+        _ANALYSIS_RUNNING.add(repository_id)
+        try:
+            self.analyze(repository_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Background analysis failed for %s: %s", repository_id, exc)
+        finally:
+            _ANALYSIS_RUNNING.discard(repository_id)
 
     def get_analysis(self, repository_id: str) -> AnalysisResponse:
-        """Fetch persisted analysis from RKB."""
+        """Return the latest analysis: cached snapshot first, then RKB fallback."""
+        snapshot = _ANALYSIS_SNAPSHOTS.get(repository_id)
+        if snapshot is not None:
+            return snapshot
+
+        if repository_id in _ANALYSIS_RUNNING:
+            return AnalysisResponse(repository_id=repository_id, status="running")
+
         try:
             from imperium.rkb.store import get_business_rules, get_session
 

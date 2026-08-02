@@ -2,7 +2,9 @@
 
 Nodes: Repository, Module, File, Function, ApiEndpoint, DbTable, ExternalService.
 Edges: CALLS, DEPENDS_ON, EXPOSES, READS, WRITES, INTEGRATES_WITH.
-Foundation: driver + ping. Graph writes are TODO(team).
+
+Implements the driver, node/edge writes (write_call_graph), blast-radius traversal,
+and the layered structure-map reads (repo_graph, layer_graph, api_surface, ...).
 """
 from __future__ import annotations
 
