@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Qdrant — RKB embeddings
     qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""  # required by Qdrant Cloud; empty = local (no auth)
     qdrant_collection: str = "imperium_rkb"
 
     # Neo4j — RKB knowledge graph

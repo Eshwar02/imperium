@@ -26,7 +26,13 @@ def _client():
 
     # check_compatibility=False silences the client/server version-skew UserWarning;
     # the REST API we use is stable across these versions.
-    return QdrantClient(url=get_settings().qdrant_url, check_compatibility=False)
+    # api_key is required by Qdrant Cloud; empty → local instance with no auth.
+    settings = get_settings()
+    return QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key or None,
+        check_compatibility=False,
+    )
 
 
 def _ensure_collection() -> None:
