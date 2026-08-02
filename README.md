@@ -103,11 +103,11 @@ curl -X POST localhost:8000/api/runs/<run_id>/resume -d '{"votes":{"security":"a
 API + data + dependency graph mappers → Neo4j · map-reduce scaling over modules ·
 durable LangGraph orchestration with Gate A/B interrupts · run lifecycle + SSE ·
 read APIs for graph layers / hierarchy / business-rules / priorities / changesets /
-simulations / timeline / usage · background (async) analysis with persisted snapshots ·
+simulations / timeline / usage · comprehension checks + streaming RKB chat/copilot ·
+background (async) analysis with persisted snapshots ·
 Qdrant Cloud auth + managed-services deployment guide.
-Backend tests: `cd backend && .venv/bin/python -m pytest` (107 passing).
+Backend tests: `cd backend && .venv/bin/python -m pytest` (112 passing).
 
-**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · two backend
-routes for the last panels (`/api/comprehension/:id`, streaming `/api/chat/:id`) ·
-deeper `simulate`→changeset wiring in the durable pipeline · durable (Postgres-backed)
+**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · deeper
+`simulate`→changeset wiring in the durable pipeline · durable (Postgres-backed)
 run/analysis state for multi-instance deploys · incremental (churn-gated) re-analysis.
