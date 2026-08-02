@@ -12,9 +12,11 @@ exists, and modernizes it under human approval — while tracking not just **cod
 drift** but **comprehension drift** (what a team understands vs. what AI shipped).
 
 > Status: **working multi-agent system.** The LangChain agent layer, multi-graph
-> intelligence, enterprise-scale (map-reduce) analysis, and durable LangGraph
-> orchestration with human-gate interrupts are implemented and tested. The frontend
-> is a build spec + scaffold; a few intelligence scanners and some read APIs remain.
+> intelligence, enterprise-scale (map-reduce) analysis, the read APIs the frontend
+> needs, and durable LangGraph orchestration with human-gate interrupts are
+> implemented and tested (107 passing). Backing stores run locally (compose) or against
+> managed cloud services (Qdrant Cloud / Neo4j AuraDB / Upstash) — see
+> [`docs/deployment.md`](docs/deployment.md). The frontend is a build spec + scaffold.
 
 ## What works today
 
@@ -60,9 +62,10 @@ imperium/
 ## Quick start
 
 ```bash
-# 1. backing services
+# 1. backing services — local containers (docker or rootless podman)
 cp .env.example .env
-docker compose up -d
+docker compose up -d          # or: podman compose up -d
+# For production, point .env at managed services instead — see docs/deployment.md
 
 # 2. backend
 cd backend
@@ -98,10 +101,13 @@ curl -X POST localhost:8000/api/runs/<run_id>/resume -d '{"votes":{"security":"a
 
 **Done:** LangChain LLM layer · all agents implemented (tool-using where it helps) ·
 API + data + dependency graph mappers → Neo4j · map-reduce scaling over modules ·
-durable LangGraph orchestration with Gate A/B interrupts · run lifecycle + SSE.
-Backend tests: `cd backend && .venv/bin/python -m pytest` (37 passing).
+durable LangGraph orchestration with Gate A/B interrupts · run lifecycle + SSE ·
+read APIs for graph layers / hierarchy / business-rules / priorities / changesets /
+simulations / timeline / usage · background (async) analysis with persisted snapshots ·
+Qdrant Cloud auth + managed-services deployment guide.
+Backend tests: `cd backend && .venv/bin/python -m pytest` (107 passing).
 
-**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · read APIs for
-the graph layers / hierarchy / priorities / usage · deeper `simulate`→changeset
-wiring in the durable pipeline · `security_scanner` / `test_coverage` /
-`language_detection` scanners · incremental (churn-gated) re-analysis.
+**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · two backend
+routes for the last panels (`/api/comprehension/:id`, streaming `/api/chat/:id`) ·
+deeper `simulate`→changeset wiring in the durable pipeline · durable (Postgres-backed)
+run/analysis state for multi-instance deploys · incremental (churn-gated) re-analysis.
