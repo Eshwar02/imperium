@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Language Detection (TDD §4). Weighted by manifest files + LOC counts.
 
 Strategy:
@@ -7,15 +8,28 @@ Strategy:
      strongly boosts the corresponding language's rank.
   4. COBOL support: .cbl/.cob/.cpy per TDD §12.
   5. Returns ranked list of language strings + metadata.
+=======
+"""Language Detection (TDD §4). Extension-based, weighted by lines of code and by
+manifest files, ranked. Handles COBOL (.cbl/.cob/.cpy) per TDD §12.
+
+``detect`` returns languages ranked most-significant-first (by LOC, with a boost for
+languages whose ecosystem manifest is present). ``detect_detailed`` returns the same
+ranking with per-language file + LOC counts.
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 """
 from __future__ import annotations
 
 import os
+<<<<<<< HEAD
 from collections import Counter, defaultdict
+=======
+from collections import defaultdict
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 
 _EXT_LANG: dict[str, str] = {
     ".py": "python",
     ".js": "javascript",
+    ".jsx": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
     ".jsx": "javascript",
@@ -23,6 +37,7 @@ _EXT_LANG: dict[str, str] = {
     ".go": "go",
     ".rb": "ruby",
     ".rs": "rust",
+<<<<<<< HEAD
     ".cpp": "cpp",
     ".cc": "cpp",
     ".cxx": "cpp",
@@ -34,10 +49,66 @@ _EXT_LANG: dict[str, str] = {
     ".scala": "scala",
     ".sh": "bash",
     ".bash": "bash",
+=======
+    ".php": "php",
+    ".cs": "csharp",
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
     ".cbl": "cobol",
     ".cob": "cobol",
     ".cpy": "cobol",
 }
+# Manifest filename → language it signals (a present manifest boosts that language).
+_MANIFEST_LANG = {
+    "requirements.txt": "python",
+    "pyproject.toml": "python",
+    "setup.py": "python",
+    "package.json": "javascript",
+    "tsconfig.json": "typescript",
+    "pom.xml": "java",
+    "build.gradle": "java",
+    "go.mod": "go",
+    "Gemfile": "ruby",
+    "Cargo.toml": "rust",
+    "composer.json": "php",
+}
+_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build"}
+_MANIFEST_BOOST = 500  # LOC-equivalent weight for a present manifest
+
+
+def detect_detailed(repo_path: str) -> list[dict]:
+    """Return [{language, files, loc, weight}] ranked by weight (loc + manifest boost)."""
+    files_by_lang: dict[str, int] = defaultdict(int)
+    loc_by_lang: dict[str, int] = defaultdict(int)
+    manifests: set[str] = set()
+
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        for name in files:
+            if name in _MANIFEST_LANG:
+                manifests.add(_MANIFEST_LANG[name])
+            lang = _EXT_LANG.get(os.path.splitext(name)[1].lower())
+            if not lang:
+                continue
+            files_by_lang[lang] += 1
+            try:
+                with open(os.path.join(root, name), encoding="utf-8", errors="replace") as fh:
+                    loc_by_lang[lang] += sum(1 for _ in fh)
+            except OSError:
+                pass
+
+    result = []
+    for lang in set(files_by_lang) | manifests:
+        weight = loc_by_lang.get(lang, 0) + (_MANIFEST_BOOST if lang in manifests else 0)
+        result.append(
+            {
+                "language": lang,
+                "files": files_by_lang.get(lang, 0),
+                "loc": loc_by_lang.get(lang, 0),
+                "weight": weight,
+            }
+        )
+    result.sort(key=lambda d: d["weight"], reverse=True)
+    return result
 
 # Manifest file → language it implies, with a strong boost multiplier
 _MANIFEST_BOOST: dict[str, tuple[str, int]] = {
@@ -62,6 +133,7 @@ _SKIP_DIRS = {".git", "node_modules", "vendor", "__pycache__", ".venv", "venv", 
 
 
 def detect(repo_path: str) -> list[str]:
+<<<<<<< HEAD
     """Return ranked list of language names (most prominent first).
 
     Ranking combines: LOC count × language weight + manifest boost.
@@ -149,3 +221,7 @@ def detect_with_stats(repo_path: str) -> list[dict]:
         for lang in all_langs
     ]
     return sorted(result, key=lambda x: x["loc"] + (500 if x["manifest_detected"] else 0), reverse=True)
+=======
+    """Return languages present, ranked most-significant-first."""
+    return [d["language"] for d in detect_detailed(repo_path) if d["weight"] > 0]
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11

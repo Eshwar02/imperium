@@ -29,6 +29,13 @@ from imperium.api.schemas import AnalysisResponse, Category, Finding, GateDecisi
 
 log = logging.getLogger("imperium.core.orchestrator")
 
+# Latest completed analysis per repository, so GET /analysis can return the real
+# result without re-running the pipeline. Process-local by design: analyses are
+# also durably reflected in the RKB (business rules) as a fallback across restarts.
+_ANALYSIS_SNAPSHOTS: dict[str, AnalysisResponse] = {}
+# Repositories whose analysis is currently running in a background task.
+_ANALYSIS_RUNNING: set[str] = set()
+
 
 class Orchestrator:
     """Coordinates the multi-agent pipeline (PRD §7 Steps 1-16)."""
@@ -96,6 +103,15 @@ class Orchestrator:
             log.warning("Call graph build failed: %s", exc)
             graph = {"nodes": [], "edges": []}
 
+        # 2b. Build API + data + dependency graph layers → Neo4j
+        try:
+            from imperium.intelligence.multigraph import build_multigraph
+
+            mg = build_multigraph(repository_id, repo_path, write=True)
+            results["multigraph"] = mg["counts"]
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Multigraph build failed: %s", exc)
+
         # 3. Build timeline → Postgres + Qdrant
         try:
             from imperium.intelligence.timeline import build_timeline
@@ -155,9 +171,27 @@ class Orchestrator:
         all_findings: list[dict] = []
         structure_map: dict | None = None
 
+        from imperium.core.run_events import emit, run_context
+
+        def _run_named(name, agent):
+            # Emit live start/done inside the worker so the copied context's emitter
+            # (bound to the active run) reaches the run's event log.
+            emit({"event": "agent_start", "agent": name})
+            result = self._run_agent_safe(agent, ctx)
+            emit(
+                {
+                    "event": "agent_done",
+                    "agent": name,
+                    "findings": len(result.get("findings", [])),
+                }
+            )
+            return result
+
         with ThreadPoolExecutor(max_workers=4) as pool:
+            # copy_context() per submit so the run emitter (a contextvar) is visible
+            # in the pool threads — contextvars do not cross threads on their own.
             futures = {
-                pool.submit(self._run_agent_safe, agent, ctx): name
+                pool.submit(run_context().run, _run_named, name, agent): name
                 for name, agent in agents
             }
             for future in as_completed(futures):
@@ -168,6 +202,7 @@ class Orchestrator:
                         structure_map = result["structure_map"]
                     all_findings.extend(result.get("findings", []))
                 except Exception as exc:  # noqa: BLE001
+                    emit({"event": "agent_error", "agent": name, "error": str(exc)[:200]})
                     log.warning("Agent %s failed: %s", name, exc)
 
         # Persist findings to RKB
@@ -186,15 +221,36 @@ class Orchestrator:
             if f.get("title")
         ]
 
-        return AnalysisResponse(
+        response = AnalysisResponse(
             repository_id=repository_id,
             status="complete",
             structure_map=structure_map,
             findings=findings,
         )
+        # Cache the full snapshot so GET /analysis returns it without re-running.
+        _ANALYSIS_SNAPSHOTS[repository_id] = response
+        _ANALYSIS_RUNNING.discard(repository_id)
+        return response
+
+    def analyze_in_background(self, repository_id: str) -> None:
+        """Run analyze() as a background task, tracking running state and errors."""
+        _ANALYSIS_RUNNING.add(repository_id)
+        try:
+            self.analyze(repository_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Background analysis failed for %s: %s", repository_id, exc)
+        finally:
+            _ANALYSIS_RUNNING.discard(repository_id)
 
     def get_analysis(self, repository_id: str) -> AnalysisResponse:
-        """Fetch persisted analysis from RKB."""
+        """Return the latest analysis: cached snapshot first, then RKB fallback."""
+        snapshot = _ANALYSIS_SNAPSHOTS.get(repository_id)
+        if snapshot is not None:
+            return snapshot
+
+        if repository_id in _ANALYSIS_RUNNING:
+            return AnalysisResponse(repository_id=repository_id, status="running")
+
         try:
             from imperium.rkb.store import get_business_rules, get_session
 
@@ -227,13 +283,10 @@ class Orchestrator:
             return AnalysisResponse(repository_id=repository_id, status="queued")
 
     def _run_agent_safe(self, agent, ctx: AgentContext) -> dict:
-        try:
-            return agent.run(ctx)
-        except NotImplementedError:
-            return {}
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Agent %s raised: %s", agent.name, exc)
-            return {}
+        """Run an agent under the self-healing boundary (diagnose → remediate → retry)."""
+        from imperium.core.healing import heal_call
+
+        return heal_call(f"agent.{agent.name}", agent.run, ctx, default={}, retries=1)
 
     def _persist_findings(self, repository_id: str, findings: list[dict]) -> None:
         """Persist findings that represent business rules to RKB."""

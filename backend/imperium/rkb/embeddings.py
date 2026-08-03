@@ -24,7 +24,15 @@ _VECTOR_SIZE = 1536  # text-embedding-3-small / compatible
 def _client():
     from qdrant_client import QdrantClient
 
-    return QdrantClient(url=get_settings().qdrant_url)
+    # check_compatibility=False silences the client/server version-skew UserWarning;
+    # the REST API we use is stable across these versions.
+    # api_key is required by Qdrant Cloud; empty → local instance with no auth.
+    settings = get_settings()
+    return QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key or None,
+        check_compatibility=False,
+    )
 
 
 def _ensure_collection() -> None:
@@ -43,7 +51,7 @@ def _ensure_collection() -> None:
 
 
 def _embed(text: str) -> list[float]:
-    """Embed text using the configured LLM provider (Gemini / Mistral / fallback).
+    """Embed text using the configured LLM provider (Mistral / fallback).
 
     Falls back to a zero-vector if no embedding provider is available so the
     pipeline degrades gracefully during dev without API keys.

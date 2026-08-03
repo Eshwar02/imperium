@@ -1,8 +1,14 @@
-"""Structure & Integration Agent (TDD §8). Builds dependency/call graph + integration
-catalogue for the interactive map (PRD Step 3).
+"""Structure & Integration Agent (TDD §8). Produces the dependency/call graph for the
+interactive map (PRD Step 3) as React-Flow-ready ``{nodes, edges}``.
 
+<<<<<<< HEAD
 Drives intelligence.call_graph + api_mapper + db_mapper, writes to rkb.graph, and
 returns a React-Flow-ready {nodes, edges} structure map.
+=======
+Prefers the graph already written to Neo4j by the ingestion pipeline
+(``core.orchestrator.build_knowledge_base``); if that store is empty but source is on
+disk, it builds the call graph on the fly from the parsed AST.
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 """
 from __future__ import annotations
 
@@ -13,12 +19,15 @@ from imperium.api.schemas import Category, Finding
 
 log = logging.getLogger("imperium.agents.structure")
 
+log = logging.getLogger("imperium.agents.structure")
+
 
 class StructureAgent(BaseAgent):
     name = "structure"
     role = "structure"  # → Cerebras (llm/routing.py)
 
     def run(self, ctx: AgentContext) -> dict:
+<<<<<<< HEAD
         """Build call graph, map APIs and DB, persist to Neo4j, return structure map."""
         repository_id = ctx.repository_id
         repo_path = ctx.repo_path
@@ -30,11 +39,30 @@ class StructureAgent(BaseAgent):
             return {"structure_map": structure_map, "findings": []}
 
         # 1. Parse repo files and build call graph → Neo4j
+=======
+        """Return the repository's structure map ({nodes, edges}) for the graph viewer."""
+        graph = self._fetch_graph(ctx.repository_id)
+        if not graph.get("nodes") and ctx.repo_path:
+            graph = self._build_graph(ctx.repository_id, ctx.repo_path)
+        return {"structure_map": graph, "findings": []}
+
+    def _fetch_graph(self, repository_id: str) -> dict:
+        try:
+            from imperium.rkb.graph import repo_graph
+
+            return repo_graph(repository_id) or {"nodes": [], "edges": []}
+        except Exception as exc:  # noqa: BLE001
+            log.debug("graph fetch failed: %s", exc)
+            return {"nodes": [], "edges": []}
+
+    def _build_graph(self, repository_id: str, repo_path: str) -> dict:
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
         try:
             from imperium.intelligence.call_graph import build_call_graph
             from imperium.intelligence.parser import parse_directory
 
             parsed = parse_directory(repo_path)
+<<<<<<< HEAD
             graph = build_call_graph(parsed_files=parsed, repository_id=repository_id)
             structure_map["nodes"] = graph.get("nodes", [])
             structure_map["edges"] = graph.get("edges", [])
@@ -121,3 +149,9 @@ class StructureAgent(BaseAgent):
                 session.close()
         except Exception as exc:  # noqa: BLE001
             log.warning("Module upsert failed: %s", exc)
+=======
+            return build_call_graph(parsed_files=parsed, repository_id=repository_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("call graph build failed: %s", exc)
+            return {"nodes": [], "edges": []}
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11

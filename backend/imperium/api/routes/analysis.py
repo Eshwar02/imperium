@@ -7,8 +7,11 @@ Routes:
 """
 from __future__ import annotations
 
+<<<<<<< HEAD
 import logging
 
+=======
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 from fastapi import APIRouter, BackgroundTasks
 
 from imperium.api.schemas import AnalysisResponse
@@ -31,6 +34,7 @@ def _run_analysis_background(repository_id: str) -> None:
 
 @router.post("/analysis/{repository_id}", response_model=AnalysisResponse)
 def run_analysis(repository_id: str, background_tasks: BackgroundTasks) -> AnalysisResponse:
+<<<<<<< HEAD
     """Enqueue the sub-agent analysis pipeline as a background task.
 
     Returns immediately with status=queued. Poll GET /analysis/{repository_id}
@@ -38,10 +42,24 @@ def run_analysis(repository_id: str, background_tasks: BackgroundTasks) -> Analy
     """
     background_tasks.add_task(_run_analysis_background, repository_id)
     return AnalysisResponse(repository_id=repository_id, status="queued")
+=======
+    """Kick off the sub-agent analysis pipeline in the background.
+
+    Returns immediately with status ``running``; poll GET /analysis/{id} for the
+    result, or subscribe to the run's SSE stream for live progress.
+    """
+    orch = Orchestrator()
+    background_tasks.add_task(orch.analyze_in_background, repository_id)
+    return AnalysisResponse(repository_id=repository_id, status="running")
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 
 
 @router.get("/analysis/{repository_id}", response_model=AnalysisResponse)
 def get_analysis(repository_id: str) -> AnalysisResponse:
+<<<<<<< HEAD
     """Fetch the latest analysis result from RKB (no re-run)."""
+=======
+    """Fetch the latest analysis result (cached snapshot, then RKB fallback)."""
+>>>>>>> a623fc793a781919e487d947e94daaefb57acf11
     orch = Orchestrator()
     return orch.get_analysis(repository_id)

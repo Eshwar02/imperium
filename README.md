@@ -1,14 +1,38 @@
+<p align="center">
+  <img src="docs/assets/imperium_lockup_horizontal.png" alt="Imperium — Enterprise Knowledge OS" width="520">
+</p>
+
 # Imperium
 
-Enterprise Knowledge Operating System (EKOS) — Phase 1 prototype foundation.
+Enterprise Knowledge Operating System (EKOS).
 
 Repository intelligence + human-verified knowledge base + governed incremental
-modernization. This repo is the **foundation scaffold**: the full Phase 1 skeleton
-per the Technical Design Document, with a runnable spine and stubbed internals for
-the team to fill in.
+modernization. Imperium reads an organization's whole codebase, remembers *why* it
+exists, and modernizes it under human approval — while tracking not just **code
+drift** but **comprehension drift** (what a team understands vs. what AI shipped).
 
-> Status: foundation code. Boots, connects, exposes the pipeline surface. Agent /
-> intelligence internals are stubs marked `# TODO(team)`.
+> Status: **working multi-agent system.** The LangChain agent layer, multi-graph
+> intelligence, enterprise-scale (map-reduce) analysis, the read APIs the frontend
+> needs, and durable LangGraph orchestration with human-gate interrupts are
+> implemented and tested (107 passing). Backing stores run locally (compose) or against
+> managed cloud services (Qdrant Cloud / Neo4j AuraDB / Upstash) — see
+> [`docs/deployment.md`](docs/deployment.md). The frontend is a build spec + scaffold.
+
+## What works today
+
+- **Per-agent LLM layer** — each agent role routes to its own provider chain
+  (NVIDIA / Groq / Cerebras / Mistral) via LangChain `ChatOpenAI` with
+  automatic fallback, streaming, and token accounting. No OpenAI.
+- **Tool-using agents** — research / security / compatibility investigate with
+  read-only tools over the engine (semantic memory, call graph, API/data graphs,
+  source); every agent has a working implementation.
+- **Multiple graph layers** — call, dependency, **API** (`EXPOSES`/`CONSUMES`) and
+  **data** (`READS`/`WRITES`) graphs written to Neo4j and traversable by agents.
+- **Enterprise scale** — analysis runs map-reduce over the module hierarchy
+  (priority-ordered, concurrent, deduped) so it survives million-LOC codebases.
+- **Durable, gated orchestration** — a checkpointed LangGraph run
+  (`build_kb → analyze → Gate A → simulate → Gate B → finalize`) that suspends at
+  the human gates and resumes, surviving restarts. Driven via `/api/runs` + SSE.
 
 ## Layout
 
@@ -24,21 +48,24 @@ imperium/
 
 | TDD section | Code location |
 |---|---|
-| 4. Repository Intelligence Engine | `backend/imperium/intelligence/` |
-| 5. Repository Knowledge Base (RKB) | `backend/imperium/rkb/` |
-| 6. Memory Architecture (RAG) | `backend/imperium/rkb/store.py`, `embeddings.py` |
-| 7. Human-in-the-Loop | `backend/imperium/api/routes/gates.py` |
-| 8. Multi-Agent Architecture | `backend/imperium/agents/`, `core/orchestrator.py` |
+| 4. Repository Intelligence Engine | `backend/imperium/intelligence/` (parser, call_graph, `api_mapper`, `db_mapper`, `multigraph`) |
+| 5. Repository Knowledge Base (RKB) | `backend/imperium/rkb/` (Postgres + Qdrant + Neo4j) |
+| 6. Memory Architecture (RAG) | `backend/imperium/rkb/store.py`, `embeddings.py`, `graph.py` |
+| 7. Human-in-the-Loop | `backend/imperium/api/routes/gates.py`, gate interrupts in `core/graph_orchestrator.py` |
+| 8. Multi-Agent Architecture | `backend/imperium/agents/` (tools, `agent_factory`, `scale`), `core/orchestrator.py` |
+| 8. Per-agent LLM routing | `backend/imperium/llm/` (`routing.py`, `factory.py`, `client.py`) |
+| 8. Durable orchestration | `backend/imperium/core/graph_orchestrator.py`, `runs.py`, `api/routes/runs.py` |
 | 9. Incremental Transformation | `backend/imperium/agents/implementation.py`, `sandbox/` |
 | 10. Integrations | `docker-compose.yml`, `rkb/*`, `llm/client.py` |
-| Structure map / Mermaid | `frontend/src/pages/StructureMap.tsx` |
+| Frontend (premium IDE spec) | `docs/frontend-build-guide.md`, `frontend/src/` |
 
 ## Quick start
 
 ```bash
-# 1. backing services
+# 1. backing services — local containers (docker or rootless podman)
 cp .env.example .env
-docker compose up -d
+docker compose up -d          # or: podman compose up -d
+# For production, point .env at managed services instead — see docs/deployment.md
 
 # 2. backend
 cd backend
@@ -54,16 +81,33 @@ npm run dev
 # → http://localhost:5173
 ```
 
-## Pipeline (TDD §3) — current stub status
+## Pipeline (TDD §3)
 
-Repository → Intelligence Engine → Parsing → Classification → Knowledge
-Extraction → RKB → Human Verification → Documentation → Mermaid → Transformation
-Planning → Risk → Blast Radius → Sandbox → Regression → Merge
+Repository → Intelligence Engine → Parsing → Multi-graph (call / dependency / API /
+data) → Knowledge Extraction → RKB → Human Verification (Gate A) → Simulation →
+Behavioral Diff (Gate B) → Documentation → Comprehension checks
 
-Endpoints exist for each stage under `/api`; handlers are stubs.
+Run it as a durable, resumable job:
 
-## Team build order
+```bash
+# start a run (drives to Gate A in the background)
+curl -X POST localhost:8000/api/runs -d '{"repository_id":"<id>"}' -H 'content-type: application/json'
+curl localhost:8000/api/runs/<run_id>                 # status / stage / pending gate
+curl -N localhost:8000/api/runs/<run_id>/events        # live SSE stream
+curl -X POST localhost:8000/api/runs/<run_id>/resume -d '{"votes":{"security":"approve"}}' -H 'content-type: application/json'
+```
 
-See `backend/imperium/` module docstrings — each carries a `# TODO(team)` with the
-concrete first task. Suggested slice order: intelligence.parser → rkb.models →
-agents.structure → api.analysis → frontend.StructureMap → gates → sandbox.
+## Status detail
+
+**Done:** LangChain LLM layer · all agents implemented (tool-using where it helps) ·
+API + data + dependency graph mappers → Neo4j · map-reduce scaling over modules ·
+durable LangGraph orchestration with Gate A/B interrupts · run lifecycle + SSE ·
+read APIs for graph layers / hierarchy / business-rules / priorities / changesets /
+simulations / timeline / usage · comprehension checks + streaming RKB chat/copilot ·
+background (async) analysis with persisted snapshots ·
+Qdrant Cloud auth + managed-services deployment guide.
+Backend tests: `cd backend && .venv/bin/python -m pytest` (112 passing).
+
+**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · deeper
+`simulate`→changeset wiring in the durable pipeline · durable (Postgres-backed)
+run/analysis state for multi-instance deploys · incremental (churn-gated) re-analysis.
