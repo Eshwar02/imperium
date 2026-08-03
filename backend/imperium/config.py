@@ -9,6 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # Supabase — auth
+    supabase_jwt_secret: str = "changeme"
+
     # App
     imperium_env: str = "dev"
     api_host: str = "0.0.0.0"

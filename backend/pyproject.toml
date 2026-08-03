@@ -18,6 +18,7 @@ dependencies = [
     "tree-sitter>=0.21",
     "gitpython>=3.1",
     "python-multipart>=0.0.9",
+    "python-jose[cryptography]>=3.3",
 ]
 
 [project.optional-dependencies]

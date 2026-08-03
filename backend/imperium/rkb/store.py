@@ -25,12 +25,37 @@ from imperium.rkb.models import (
 )
 
 _settings = get_settings()
-_engine = create_engine(_settings.postgres_dsn, future=True, pool_pre_ping=True)
+
+# Supabase requires SSL. psycopg3 honours ?sslmode=require in the DSN directly,
+# but we also pass connect_args as a belt-and-suspenders measure.
+_engine = create_engine(
+    _settings.postgres_dsn,
+    future=True,
+    pool_pre_ping=True,
+    connect_args={"sslmode": "require"} if "supabase.com" in _settings.postgres_dsn else {},
+)
 SessionLocal = sessionmaker(bind=_engine, class_=Session, expire_on_commit=False)
 
 
 def init_schema() -> None:
-    """Create tables if absent. Use Alembic migrations for production."""
+    """Bootstrap tables in dev/test environments only.
+
+    Production deployments must use Alembic:
+        alembic upgrade head
+
+    This function is intentionally kept for local dev convenience (e.g. running
+    tests without a full migration stack), but should not be called in production.
+    Guard: skips silently in non-dev environments.
+    """
+    from imperium.config import get_settings
+
+    if get_settings().imperium_env not in ("dev", "test"):
+        import logging
+        logging.getLogger("imperium.rkb.store").warning(
+            "init_schema() called in env=%s — skipping (use `alembic upgrade head`)",
+            get_settings().imperium_env,
+        )
+        return
     Base.metadata.create_all(_engine)
 
 
@@ -111,9 +136,15 @@ def upsert_business_rule(
     locations: list,
     confidence: float,
     hitl_question: str | None = None,
+    linked_node_ids: list | None = None,
+    linked_decision_ids: list | None = None,
 ) -> BusinessRule:
     """Dedup by statement hash — if same rule exists update confidence/locations;
-    otherwise create a new versioned entry."""
+    otherwise create a new versioned entry.
+
+    linked_node_ids: Neo4j node IDs for code locations that embody this rule.
+    linked_decision_ids: Decision IDs that reference this rule.
+    """
     h = _rule_hash(statement)
     existing = (
         session.query(BusinessRule)
@@ -125,7 +156,16 @@ def upsert_business_rule(
         existing.confidence = confidence
         if hitl_question:
             existing.hitl_question = hitl_question
+        if linked_node_ids is not None:
+            # Merge without duplicates
+            current = existing.linked_node_ids or []
+            existing.linked_node_ids = list(set(current) | set(linked_node_ids))
+        if linked_decision_ids is not None:
+            current = existing.linked_decision_ids or []
+            existing.linked_decision_ids = list(set(current) | set(linked_decision_ids))
         session.commit()
+        # Embed updated rule text in Qdrant (idempotent — same hash → same point_id)
+        _embed_rule(existing)
         return existing
 
     obj = BusinessRule(
@@ -135,10 +175,57 @@ def upsert_business_rule(
         locations=locations,
         confidence=confidence,
         hitl_question=hitl_question,
+        linked_node_ids=linked_node_ids or [],
+        linked_decision_ids=linked_decision_ids or [],
     )
     session.add(obj)
     session.commit()
+    # Embed rule text in Qdrant
+    _embed_rule(obj)
     return obj
+
+
+def _embed_rule(rule: BusinessRule) -> None:
+    """Embed the rule's statement text into Qdrant for semantic search."""
+    try:
+        from imperium.rkb.embeddings import upsert as qdrant_upsert
+
+        qdrant_upsert(
+            texts=[rule.statement],
+            payloads=[{
+                "repository_id": rule.repository_id,
+                "level": "business_rule",
+                "rule_id": rule.id,
+                "statement_hash": rule.statement_hash,
+                "confidence": rule.confidence,
+                "verified": rule.verified,
+            }],
+        )
+    except Exception as exc:  # noqa: BLE001
+        import logging
+        logging.getLogger("imperium.rkb.store").warning(
+            "Rule embedding failed for %s: %s", rule.id, exc
+        )
+
+
+def link_rule_to_decision(session: Session, rule_id: str, decision_id: str) -> None:
+    """Append decision_id to a BusinessRule's linked_decision_ids (§1.4)."""
+    obj = session.get(BusinessRule, rule_id)
+    if obj:
+        current = obj.linked_decision_ids or []
+        if decision_id not in current:
+            obj.linked_decision_ids = current + [decision_id]
+            session.commit()
+
+
+def link_rule_to_node(session: Session, rule_id: str, node_id: str) -> None:
+    """Append a Neo4j node_id to a BusinessRule's linked_node_ids (§1.4)."""
+    obj = session.get(BusinessRule, rule_id)
+    if obj:
+        current = obj.linked_node_ids or []
+        if node_id not in current:
+            obj.linked_node_ids = current + [node_id]
+            session.commit()
 
 
 def get_unverified_rules(session: Session, repository_id: str, threshold: float = 0.7) -> list[BusinessRule]:

@@ -1,0 +1,277 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>How Imperium Works</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.6; background: #fff; color: #1f2328; padding: 32px 20px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .sub { color: #57606a; font-size: 13px; margin-bottom: 32px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 28px 0 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+  h3 { font-size: 13px; font-weight: 700; margin: 14px 0 4px; color: #1f2328; }
+  p { margin-bottom: 8px; color: #1f2328; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 4px; }
+  .b-green  { background: #dcfce7; color: #166534; }
+  .b-blue   { background: #dbeafe; color: #1e40af; }
+  .b-purple { background: #ede9fe; color: #6d28d9; }
+  .b-orange { background: #ffedd5; color: #9a3412; }
+  .b-gray   { background: #f7f8fa; color: #57606a; border: 1px solid #e5e7eb; }
+
+  /* Pipeline flow */
+  .pipeline { display: flex; flex-direction: column; gap: 0; margin: 16px 0; }
+  .step { display: flex; align-items: flex-start; gap: 14px; padding: 12px 14px; border: 1px solid #e5e7eb; border-bottom: none; background: #fff; }
+  .step:first-child { border-radius: 7px 7px 0 0; }
+  .step:last-child  { border-radius: 0 0 7px 7px; border-bottom: 1px solid #e5e7eb; }
+  .step-num { min-width: 26px; height: 26px; border-radius: 50%; background: #3b82d4; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .step-body { flex: 1; }
+  .step-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .step-desc { font-size: 13px; color: #57606a; }
+  .step-tags { margin-top: 5px; }
+
+  /* Three stores */
+  .stores { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 12px 0; }
+  .store { border: 1px solid #e5e7eb; border-radius: 7px; padding: 12px; background: #f7f8fa; }
+  .store-name { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .store-detail { font-size: 12px; color: #57606a; }
+
+  /* Agents grid */
+  .agents { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+  .agent { border: 1px solid #e5e7eb; border-radius: 7px; padding: 12px; background: #fff; }
+  .agent-name { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
+  .agent-desc { font-size: 12px; color: #57606a; }
+
+  /* Flow diagram using SVG */
+  .diagram { margin: 20px 0; background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; overflow-x: auto; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th { background: #f7f8fa; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; }
+  td { padding: 7px 10px; border: 1px solid #e5e7eb; color: #1f2328; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-size: 12px; font-family: "Cascadia Code", "Fira Code", monospace; }
+
+  .callout { border-left: 3px solid #3b82d4; background: #eff6ff; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 13px; }
+
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #57606a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>How Imperium Works</h1>
+  <p class="sub">A complete walkthrough — from user login to AI agents writing code and storing results in Supabase.</p>
+
+  
+  <h2>Big Picture</h2>
+  <p>Imperium is an <strong>AI-powered code modernization system</strong>. You give it a Git repository URL. It analyses the code, extracts business rules, scores what to change first, and lets AI agents propose code changes — but a human must approve everything at two checkpoints (Gate A and Gate B) before anything is applied.</p>
+
+  <div class="callout">
+    Think of it as: <strong>AI does the analysis and drafts changes — you stay in control of every decision.</strong>
+  </div>
+
+  
+  <h2>1. Authentication (Supabase Auth)</h2>
+  <p>Before anything else, every user must sign in.</p>
+
+  <div class="pipeline">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">User visits the app</div>
+        <div class="step-desc">The frontend (React, running at <code>localhost:5173</code>) detects no session and redirects to <code>/login</code>.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Email + Password login</div>
+        <div class="step-desc">The <code>Login.tsx</code> page calls <code>supabase.auth.signInWithPassword()</code>. Supabase validates credentials from its Auth database (your project: <code>lzwujzkwrsvxxffaybgi</code>).</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">JWT token issued</div>
+        <div class="step-desc">On success, Supabase returns a <strong>JWT access token</strong>. The <code>AuthContext</code> stores this in memory and attaches it as <code>Authorization: Bearer &lt;token&gt;</code> on every API call to the backend.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Backend verifies the token</div>
+        <div class="step-desc">Every request to <code>/api/*</code> passes through the <code>verify_jwt</code> middleware (<code>api/auth.py</code>). It uses <code>SUPABASE_JWT_SECRET</code> to verify the token — no valid token, no access.</div>
+        <div class="step-tags"><span class="badge b-orange">python-jose</span><span class="badge b-blue">HS256</span></div>
+      </div>
+    </div>
+  </div>
+
+  
+  <h2>2. The Three Databases</h2>
+  <p>Imperium uses three specialized stores — each for a different purpose:</p>
+
+  <div class="stores">
+    <div class="store">
+      <div class="store-name">Supabase / Postgres</div>
+      <div class="store-detail"><strong>Relational metadata.</strong> Repositories, modules, business rules, decisions, priorities, timelines, simulations.<br /><br />Host: <code>aws-0-ap-northeast-1</code> (Tokyo)<br />10 tables, migrated via Alembic.</div>
+    </div>
+    <div class="store">
+      <div class="store-name">Qdrant</div>
+      <div class="store-detail"><strong>Semantic memory.</strong> Vector embeddings of code summaries and business rules. Lets agents search by meaning, not just keywords.<br /><br />Host: <code>localhost:6333</code></div>
+    </div>
+    <div class="store">
+      <div class="store-name">Neo4j</div>
+      <div class="store-detail"><strong>Call graph.</strong> Who calls what. Which files depend on which modules. Used to calculate blast radius of a change.<br /><br />Host: <code>bolt://localhost:7687</code></div>
+    </div>
+  </div>
+
+  
+  <h2>3. The Full Pipeline (Steps 1 → 16)</h2>
+  <p>Once logged in, a user submits a repository URL. The pipeline runs in this order:</p>
+
+  <div class="pipeline">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Ingest the repo</div>
+        <div class="step-desc"><code>POST /api/ingest</code> — clones the Git repo into the workspace folder, detects languages, stores a <code>Repository</code> row in Postgres.</div>
+        <div class="step-tags"><span class="badge b-gray">ingestion/loader.py</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Build the knowledge base</div>
+        <div class="step-desc">Parse all source files → build call graph (Neo4j) → embed code summaries (Qdrant) → build git timeline → compute priority scores. All stored in Postgres.</div>
+        <div class="step-tags"><span class="badge b-gray">intelligence/parser.py</span><span class="badge b-gray">call_graph.py</span><span class="badge b-gray">timeline.py</span><span class="badge b-gray">priority.py</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Run 4 Analysis Agents (parallel)</div>
+        <div class="step-desc">Structure, Business Logic, Security, and Research agents run <strong>at the same time</strong> (ThreadPoolExecutor). Each talks to a different LLM. Findings are merged and saved to Postgres.</div>
+        <div class="step-tags"><span class="badge b-purple">Cerebras</span><span class="badge b-purple">NVIDIA Nemotron</span><span class="badge b-purple">Groq</span><span class="badge b-purple">Gemini</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Gate A — Human Approval</div>
+        <div class="step-desc">The frontend shows findings per category (security, performance, modernization, integration, docs). You <strong>approve, reject, or defer</strong> each category independently. Votes are saved to the <code>decisions</code> table — append-only, never deleted.</div>
+        <div class="step-tags"><span class="badge b-green">Human in the Loop</span><span class="badge b-gray">GateA.tsx</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Simulate transformations (dry-run)</div>
+        <div class="step-desc">For approved categories only: the system runs a <strong>dry-run simulation</strong> — old code → proposed new code → diff → confidence score. If confidence is too low, it blocks and asks you.</div>
+        <div class="step-tags"><span class="badge b-gray">intelligence/simulation.py</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">Implementation + Testing agents</div>
+        <div class="step-desc">Implementation agent writes the actual code changes (one branch per category). Testing agent generates and runs tests to produce a behavioral diff report.</div>
+        <div class="step-tags"><span class="badge b-purple">Mistral Codestral</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <div class="step-title">Gate B — Pre-Merge Review</div>
+        <div class="step-desc">You review the actual code diff + the behavioral diff report. Approve to merge, reject to roll back, or request revision. Every vote is recorded in Postgres.</div>
+        <div class="step-tags"><span class="badge b-green">Human in the Loop</span><span class="badge b-gray">GateB.tsx</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <div class="step-title">Documentation + Comprehension</div>
+        <div class="step-desc">Documentation agent auto-generates updated docs. Comprehension agent flags high-AI-authorship modules with low team understanding as risks for future review.</div>
+        <div class="step-tags"><span class="badge b-gray">agents/documentation.py</span><span class="badge b-gray">agents/comprehension.py</span></div>
+      </div>
+    </div>
+  </div>
+
+  
+  <h2>4. The AI Agents</h2>
+  <p>Each agent is a specialist. They each call a different LLM, chosen for their strengths:</p>
+  <div class="agents">
+    <div class="agent">
+      <div class="agent-name">Structure Agent</div>
+      <div class="agent-desc">Maps the architecture — modules, dependencies, entry points. Produces the visual structure map shown in the frontend. Uses <span class="badge b-purple">Cerebras</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Business Logic Agent</div>
+      <div class="agent-desc">Extracts hidden business rules from code — "what does this code actually enforce?" Saves rules to Postgres with dedup + versioning. Uses <span class="badge b-purple">NVIDIA Nemotron</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Security Agent</div>
+      <div class="agent-desc">Scans for hardcoded credentials, SQL injection, path traversal, weak auth patterns. Produces security findings. Uses <span class="badge b-purple">Cerebras</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Research Agent</div>
+      <div class="agent-desc">Long-context reasoning — reads the full timeline and business rule history to understand <em>why</em> the code is the way it is. Uses <span class="badge b-purple">Gemini 2.0 Flash</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Implementation Agent</div>
+      <div class="agent-desc">Writes the actual code changes. One branch per approved category. Uses <span class="badge b-purple">Mistral Codestral</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Testing Agent</div>
+      <div class="agent-desc">Generates and runs tests. Produces the behavioral diff report — baseline vs post-change behavior. Uses <span class="badge b-purple">Mistral Codestral</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Documentation Agent</div>
+      <div class="agent-desc">Auto-generates updated documentation from summaries, business rules, and decisions. Uses <span class="badge b-purple">Groq</span></div>
+    </div>
+    <div class="agent">
+      <div class="agent-name">Comprehension Agent</div>
+      <div class="agent-desc">Flags modules where AI wrote most of the code but no human has reviewed it — surfaces as a risk for Gate A. Uses <span class="badge b-purple">Cerebras</span></div>
+    </div>
+  </div>
+
+  
+  <h2>5. What Gets Stored Where</h2>
+  <table>
+    <tr><th>Data</th><th>Where</th><th>Table / Collection</th></tr>
+    <tr><td>Repositories, modules</td><td>Supabase Postgres</td><td><code>repositories</code>, <code>modules</code></td></tr>
+    <tr><td>Business rules</td><td>Supabase Postgres + Qdrant</td><td><code>business_rules</code> + embeddings</td></tr>
+    <tr><td>Every human vote / decision</td><td>Supabase Postgres</td><td><code>decisions</code> (append-only)</td></tr>
+    <tr><td>Priority scores per file</td><td>Supabase Postgres</td><td><code>transformation_priority</code></td></tr>
+    <tr><td>Git timeline / history</td><td>Supabase Postgres + Qdrant</td><td><code>timeline_events</code> + summaries</td></tr>
+    <tr><td>Dry-run simulations</td><td>Supabase Postgres</td><td><code>simulation_results</code></td></tr>
+    <tr><td>Changeset groupings</td><td>Supabase Postgres</td><td><code>changeset_manifests</code>, <code>changeset_files</code></td></tr>
+    <tr><td>Call graph / dependency graph</td><td>Neo4j</td><td>Graph nodes + edges</td></tr>
+    <tr><td>Code + summary embeddings</td><td>Qdrant</td><td><code>imperium_rkb</code> collection</td></tr>
+    <tr><td>User sessions / auth</td><td>Supabase Auth</td><td>Built-in auth schema</td></tr>
+  </table>
+
+  
+  <h2>6. The Frontend (React)</h2>
+  <table>
+    <tr><th>Page</th><th>Route</th><th>What it does</th></tr>
+    <tr><td><code>Login.tsx</code></td><td><code>/login</code></td><td>Email + password form. Calls Supabase Auth. Public — no JWT needed.</td></tr>
+    <tr><td><code>StructureMap.tsx</code></td><td><code>/</code></td><td>Visual interactive graph of the repository architecture (React Flow). Wires to the Structure Agent output.</td></tr>
+    <tr><td><code>GateA.tsx</code></td><td><code>/gate-a</code></td><td>Approve / reject / defer each category. Posts votes to <code>/api/gate-a</code>.</td></tr>
+    <tr><td><code>GateB.tsx</code></td><td><code>/gate-b</code></td><td>Review code diff + behavioral diff report. Posts votes to <code>/api/gate-b</code>.</td></tr>
+  </table>
+
+  
+  <h2>7. The Key Principle — Human Always in Control</h2>
+  <div class="callout">
+    The system is designed so that <strong>no code change can ever be applied without explicit human approval</strong>.<br /><br />
+    Gate A stops the AI before it writes any code.<br />
+    Gate B stops it before anything merges.<br />
+    Every vote is stored permanently in Postgres — who approved, when, and why. This is the audit trail.
+  </div>
+
+  <footer>Made with IBM Bob</footer>
+</div>
+</body>
+</html>

@@ -1,10 +1,11 @@
 """FastAPI app entrypoint. Wires the pipeline surface (TDD §3, §7, §9)."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from imperium import __version__
+from imperium.api.auth import verify_jwt
 from imperium.api.routes import analysis, gates, health, ingest
 
 app = FastAPI(
@@ -18,12 +19,14 @@ app.add_middleware(
     allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
+# /health is public; all /api/* routes require a valid Supabase JWT.
 app.include_router(health.router)
-app.include_router(ingest.router, prefix="/api")
-app.include_router(analysis.router, prefix="/api")
-app.include_router(gates.router, prefix="/api")
+app.include_router(ingest.router, prefix="/api", dependencies=[Depends(verify_jwt)])
+app.include_router(analysis.router, prefix="/api", dependencies=[Depends(verify_jwt)])
+app.include_router(gates.router, prefix="/api", dependencies=[Depends(verify_jwt)])
 
 
 @app.get("/", tags=["meta"])
