@@ -18,15 +18,12 @@ dependencies = [
     "tree-sitter>=0.21",
     "gitpython>=3.1",
     "python-multipart>=0.0.9",
-<<<<<<< HEAD
     "python-jose[cryptography]>=3.3",
-=======
     "langchain>=1.0",
     "langchain-core>=1.0",
     "langchain-openai>=1.0",
     "langgraph>=1.0",
     "langgraph-checkpoint-postgres>=2.0",
->>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 ]
 
 [project.optional-dependencies]

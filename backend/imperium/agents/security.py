@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-"""Security Agent (TDD §8). Drives intelligence.security_scanner; emits Findings(category=security)."""
-=======
 """Security Surface Agent (TDD §8). A tool-using agent that hunts vulnerable
 patterns, insecure data handling, and risky dependencies, emitting
 ``Finding(category=security)``.
@@ -8,15 +5,11 @@ patterns, insecure data handling, and risky dependencies, emitting
 Runs on the ``security`` role (Cerebras). Uses the read-only engine tools to inspect
 source and semantic memory rather than being handed pre-built context.
 """
->>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 from __future__ import annotations
 
 import logging
 
 from imperium.agents.base import AgentContext, BaseAgent
-from imperium.api.schemas import Category, Finding
-
-log = logging.getLogger("imperium.agents.security")
 
 log = logging.getLogger("imperium.agents.security")
 
@@ -51,26 +44,6 @@ class SecurityAgent(BaseAgent):
     role = "security"  # → Cerebras
 
     def run(self, ctx: AgentContext) -> dict:
-<<<<<<< HEAD
-        """Scan the repository for security vulnerabilities and emit Findings."""
-        repo_path = ctx.repo_path
-
-        if not repo_path:
-            log.warning("SecurityAgent: no repo_path for %s", ctx.repository_id)
-            return {"findings": []}
-
-        try:
-            from imperium.intelligence.security_scanner import scan
-
-            findings = scan(repo_path)
-            log.info(
-                "SecurityAgent: %d findings for %s", len(findings), ctx.repository_id
-            )
-            return {"findings": [f.model_dump() for f in findings]}
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Security scan failed: %s", exc)
-            return {"findings": []}
-=======
         """Audit the repository: deterministic scan + LLM map-reduce, merged."""
         from imperium.agents.scale import _dedupe, run_scaled_findings
 
@@ -97,4 +70,3 @@ class SecurityAgent(BaseAgent):
         except Exception as exc:  # noqa: BLE001
             log.debug("deterministic security scan failed: %s", exc)
             return []
->>>>>>> a623fc793a781919e487d947e94daaefb57acf11

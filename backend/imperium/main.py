@@ -5,10 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from imperium import __version__
-<<<<<<< HEAD
 from imperium.api.auth import verify_jwt
-from imperium.api.routes import analysis, gates, health, ingest
-=======
 from imperium.api.routes import (
     analysis,
     chat,
@@ -20,7 +17,6 @@ from imperium.api.routes import (
     insights,
     runs,
 )
->>>>>>> a623fc793a781919e487d947e94daaefb57acf11
 
 app = FastAPI(
     title="Imperium API",
@@ -38,20 +34,15 @@ app.add_middleware(
 
 # /health is public; all /api/* routes require a valid Supabase JWT.
 app.include_router(health.router)
-<<<<<<< HEAD
-app.include_router(ingest.router, prefix="/api", dependencies=[Depends(verify_jwt)])
-app.include_router(analysis.router, prefix="/api", dependencies=[Depends(verify_jwt)])
-app.include_router(gates.router, prefix="/api", dependencies=[Depends(verify_jwt)])
-=======
-app.include_router(ingest.router, prefix="/api")
-app.include_router(analysis.router, prefix="/api")
-app.include_router(gates.router, prefix="/api")
-app.include_router(runs.router, prefix="/api")
-app.include_router(insights.router, prefix="/api")
-app.include_router(code.router, prefix="/api")
-app.include_router(comprehension.router, prefix="/api")
-app.include_router(chat.router, prefix="/api")
->>>>>>> a623fc793a781919e487d947e94daaefb57acf11
+_auth = [Depends(verify_jwt)]
+app.include_router(ingest.router, prefix="/api", dependencies=_auth)
+app.include_router(analysis.router, prefix="/api", dependencies=_auth)
+app.include_router(gates.router, prefix="/api", dependencies=_auth)
+app.include_router(runs.router, prefix="/api", dependencies=_auth)
+app.include_router(insights.router, prefix="/api", dependencies=_auth)
+app.include_router(code.router, prefix="/api", dependencies=_auth)
+app.include_router(comprehension.router, prefix="/api", dependencies=_auth)
+app.include_router(chat.router, prefix="/api", dependencies=_auth)
 
 
 @app.get("/", tags=["meta"])
