@@ -25,6 +25,7 @@ _EXT_LANG = {
     ".cbl": "cobol",
     ".cob": "cobol",
     ".cpy": "cobol",
+    ".cobol": "cobol",
     ".jcl": "jcl",
     ".job": "jcl",
 }

@@ -245,7 +245,7 @@ def _scan_file(file_path: str) -> list[RuleCandidate]:
 
     if file_path.endswith(".py"):
         return _extract_python_candidates(source, file_path)
-    if file_path.lower().endswith((".cbl", ".cob", ".cpy")):
+    if file_path.lower().endswith((".cbl", ".cob", ".cpy", ".cobol")):
         return _extract_cobol_candidates(source, file_path)
     return _extract_generic_candidates(source, file_path)
 
