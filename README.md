@@ -13,10 +13,12 @@ drift** but **comprehension drift** (what a team understands vs. what AI shipped
 
 > Status: **working multi-agent system.** The LangChain agent layer, multi-graph
 > intelligence, enterprise-scale (map-reduce) analysis, the read APIs the frontend
-> needs, and durable LangGraph orchestration with human-gate interrupts are
-> implemented and tested (107 passing). Backing stores run locally (compose) or against
-> managed cloud services (Qdrant Cloud / Neo4j AuraDB / Upstash) — see
-> [`docs/deployment.md`](docs/deployment.md). The frontend is a build spec + scaffold.
+> needs, durable LangGraph orchestration with human-gate interrupts, **legacy-language
+> ingestion (COBOL / JCL / DB2 / CICS)**, and **Supabase-backed per-user storage** are
+> implemented and tested (133 passing). The relational store is Supabase (managed
+> Postgres + Auth); Qdrant / Neo4j / Redis run locally (compose) or against managed
+> cloud services — see [`docs/deployment.md`](docs/deployment.md). The frontend is a
+> build spec + scaffold.
 
 ## What works today
 
@@ -28,6 +30,15 @@ drift** but **comprehension drift** (what a team understands vs. what AI shipped
   source); every agent has a working implementation.
 - **Multiple graph layers** — call, dependency, **API** (`EXPOSES`/`CONSUMES`) and
   **data** (`READS`/`WRITES`) graphs written to Neo4j and traversable by agents.
+- **Legacy-language support** — pluggable language *front-ends*
+  (`backend/imperium/intelligence/frontends/`) parse **COBOL** (paragraphs,
+  `PERFORM`/`CALL`/`GO TO`, `COPY`, 88-level rules), **JCL** (`JOB`/`EXEC`/`DD` →
+  `RUNS`/`USES_DATASET`), and **DB2/CICS** (`EXEC SQL` → `READS`/`WRITES`, `EXEC CICS`
+  → `EXPOSES`) into the *same* graph the agents already traverse — no RKB changes.
+  Modern languages keep the existing tree-sitter path.
+- **Per-user, secured storage** — the relational RKB lives on **Supabase** with
+  Row-Level Security: every repository (and its child rows) is owned via
+  `owner_id = auth.uid()`; the backend verifies Supabase JWTs on every `/api/*` route.
 - **Enterprise scale** — analysis runs map-reduce over the module hierarchy
   (priority-ordered, concurrent, deduped) so it survives million-LOC codebases.
 - **Durable, gated orchestration** — a checkpointed LangGraph run
@@ -49,7 +60,9 @@ imperium/
 | TDD section | Code location |
 |---|---|
 | 4. Repository Intelligence Engine | `backend/imperium/intelligence/` (parser, call_graph, `api_mapper`, `db_mapper`, `multigraph`) |
-| 5. Repository Knowledge Base (RKB) | `backend/imperium/rkb/` (Postgres + Qdrant + Neo4j) |
+| 4a. Legacy-language front-ends | `backend/imperium/intelligence/frontends/` (`cobol`, `jcl`, `mainframe_data`, registry) |
+| 5. Repository Knowledge Base (RKB) | `backend/imperium/rkb/` (Supabase Postgres + Qdrant + Neo4j) |
+| Auth (Supabase JWT + RLS) | `backend/imperium/api/auth.py`, `api/ownership.py`, `alembic/versions/002_supabase_ownership_rls.py` |
 | 6. Memory Architecture (RAG) | `backend/imperium/rkb/store.py`, `embeddings.py`, `graph.py` |
 | 7. Human-in-the-Loop | `backend/imperium/api/routes/gates.py`, gate interrupts in `core/graph_orchestrator.py` |
 | 8. Multi-Agent Architecture | `backend/imperium/agents/` (tools, `agent_factory`, `scale`), `core/orchestrator.py` |
@@ -62,10 +75,14 @@ imperium/
 ## Quick start
 
 ```bash
-# 1. backing services — local containers (docker or rootless podman)
+# 1. backing services
 cp .env.example .env
-docker compose up -d          # or: podman compose up -d
-# For production, point .env at managed services instead — see docs/deployment.md
+# Relational store is Supabase: set POSTGRES_DSN (session pooler, port 5432) and the
+# SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_JWT_SECRET keys.
+# Qdrant / Neo4j / Redis: local containers, or point .env at managed services.
+docker compose up -d          # or: podman compose up -d  (qdrant/neo4j/redis)
+cd backend && .venv/bin/python -m alembic upgrade head   # apply RKB schema + RLS to Supabase
+# For production / managed services see docs/deployment.md
 
 # 2. backend
 cd backend
@@ -100,14 +117,17 @@ curl -X POST localhost:8000/api/runs/<run_id>/resume -d '{"votes":{"security":"a
 ## Status detail
 
 **Done:** LangChain LLM layer · all agents implemented (tool-using where it helps) ·
-API + data + dependency graph mappers → Neo4j · map-reduce scaling over modules ·
-durable LangGraph orchestration with Gate A/B interrupts · run lifecycle + SSE ·
+API + data + dependency graph mappers → Neo4j · legacy-language front-ends
+(COBOL / JCL / DB2 / CICS) feeding the same graph · map-reduce scaling over modules ·
+durable LangGraph orchestration with Gate A/B interrupts · run lifecycle + SSE
+(owner-scoped) · Supabase relational store with per-user RLS + JWT-guarded `/api/*` ·
 read APIs for graph layers / hierarchy / business-rules / priorities / changesets /
 simulations / timeline / usage · comprehension checks + streaming RKB chat/copilot ·
 background (async) analysis with persisted snapshots ·
 Qdrant Cloud auth + managed-services deployment guide.
-Backend tests: `cd backend && .venv/bin/python -m pytest` (112 passing).
+Backend tests: `cd backend && .venv/bin/python -m pytest` (133 passing).
 
-**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · deeper
-`simulate`→changeset wiring in the durable pipeline · durable (Postgres-backed)
-run/analysis state for multi-instance deploys · incremental (churn-gated) re-analysis.
+**Remaining:** frontend UI (spec in `docs/frontend-build-guide.md`) · more legacy
+languages (Fortran / C — same front-end pattern) · COBOL parser precision + content-hash
+skip for million-LOC scale · deeper `simulate`→changeset wiring in the durable pipeline ·
+incremental (churn-gated) re-analysis.
