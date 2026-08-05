@@ -28,6 +28,31 @@ def _build_kb(repository_id: str, repo_path: str) -> None:
         log.warning("Knowledge base build failed for %s: %s", repository_id, exc)
 
 
+@router.get("/repositories")
+def list_repositories(request: Request) -> dict:
+    """List the caller's repositories (owner-scoped) so the UI can populate its rail."""
+    from imperium.rkb.store import get_session, list_repositories as _list
+
+    owner_id = get_user_id(request)
+    session = get_session()
+    try:
+        repos = _list(session, owner_id)
+        return {
+            "repositories": [
+                {
+                    "id": r.id,
+                    "url": r.url,
+                    "ref": r.ref,
+                    "languages": r.languages or [],
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in repos
+            ]
+        }
+    finally:
+        session.close()
+
+
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(req: IngestRequest, background_tasks: BackgroundTasks, request: Request) -> IngestResponse:
     """Load a repository into a workspace, persist to RKB, and kick off KB pipeline.
