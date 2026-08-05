@@ -70,6 +70,27 @@ async function streamPost(path: string, body: unknown, onChunk: (s: string) => v
   }
 }
 
+/** Stream a GET SSE endpoint (run events), calling onEvent for each parsed JSON event. */
+async function streamGet(path: string, onEvent: (e: Record<string, unknown>) => void, signal?: AbortSignal) {
+  const res = await fetch(path, { headers: await authHeader(), signal });
+  if (!res.body) return;
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop() ?? "";
+    for (const p of parts) {
+      const line = p.replace(/^data:\s?/, "");
+      if (!line) continue;
+      try { onEvent(JSON.parse(line)); } catch { onEvent({ raw: line }); }
+    }
+  }
+}
+
 export const api = {
   health: () => get<{ status: string }>("/health"),
   usage: () => get<Record<string, unknown>>("/api/usage"),
@@ -109,5 +130,6 @@ export const api = {
   getRun: (runId: string) => get<Record<string, unknown>>(`/api/runs/${runId}`),
   resumeRun: (runId: string, votes: Record<string, GateDecision>) => post(`/api/runs/${runId}/resume`, { votes }),
   deleteRun: (runId: string) => del(`/api/runs/${runId}`),
-  runEventsUrl: (runId: string) => `/api/runs/${runId}/events`,
+  runEvents: (runId: string, onEvent: (e: Record<string, unknown>) => void, signal?: AbortSignal) =>
+    streamGet(`/api/runs/${runId}/events`, onEvent, signal),
 };
