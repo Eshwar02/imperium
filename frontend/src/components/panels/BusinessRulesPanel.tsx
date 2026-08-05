@@ -2,19 +2,19 @@
 import { PanelShell, Empty, Badge, Row, Btn } from "../ui";
 import { useAsync } from "../../hooks";
 import { useRepo } from "../../context/RepoContext";
-import { api } from "../../api/client";
+import { api, type Rule } from "../../api/client";
 import { t } from "../../theme";
 
 export default function BusinessRulesPanel() {
   const { activeId } = useRepo();
-  const { data, loading, error, reload } = useAsync(
+  const { data, loading, error, reload } = useAsync<{ rules?: Rule[]; business_rules?: Rule[] }>(
     () => (activeId ? api.businessRules(activeId) : Promise.resolve({})),
     [activeId],
   );
 
   if (!activeId) return <PanelShell title="Business Rules"><Empty>Select a repository.</Empty></PanelShell>;
 
-  const rules = data?.rules ?? data?.business_rules ?? [];
+  const rules: Rule[] = data?.rules ?? data?.business_rules ?? [];
 
   return (
     <PanelShell title="Business Rules" right={<Btn onClick={reload}>↻</Btn>}>
