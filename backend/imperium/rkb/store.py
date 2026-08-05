@@ -102,6 +102,18 @@ def get_repository(session: Session, repo_id: str) -> Repository | None:
     return session.get(Repository, repo_id)
 
 
+def list_repositories(session: Session, owner_id: str | None = None) -> list[Repository]:
+    """All repositories, or only those owned by ``owner_id`` (plus unclaimed ones).
+
+    Owner scoping mirrors the API's app-layer guard: a signed-in user sees their own
+    repos and any unclaimed (owner_id is None) repos; None returns everything.
+    """
+    q = session.query(Repository)
+    if owner_id is not None:
+        q = q.filter((Repository.owner_id == owner_id) | (Repository.owner_id.is_(None)))
+    return q.order_by(Repository.created_at.desc()).all()
+
+
 # ── Module helpers ────────────────────────────────────────────────────────────
 
 def upsert_module(
