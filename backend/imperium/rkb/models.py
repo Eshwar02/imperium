@@ -16,7 +16,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -32,6 +32,11 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    # Supabase auth.users.id (JWT `sub`). FK + RLS enforced in migration 002 (Postgres only);
+    # left FK-less here so dev/test create_all stays portable. Owner anchor for all child rows.
+    # Uuid(as_uuid=False) → native `uuid` on Postgres (matches the live column + FK to
+    # auth.users), CHAR(32) elsewhere for dev/test create_all. Value is the JWT `sub`.
+    owner_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True, index=True)
     url: Mapped[str | None] = mapped_column(String, nullable=True)
     ref: Mapped[str] = mapped_column(String, default="HEAD")
     languages: Mapped[list] = mapped_column(JSON, default=list)

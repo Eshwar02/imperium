@@ -18,13 +18,30 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from imperium.api.auth import get_user_id
+from imperium.api.ownership import require_owner
 from imperium.core.runs import run_manager
 
 router = APIRouter(tags=["runs"])
+
+
+def _guard_run(run_id: str, request: Request) -> None:
+    """404 if the run is unknown, or provably owned by a different user.
+
+    Mirrors ownership.require_owner: unclaimed runs (owner None) and no-user
+    contexts (e.g. tests) stay accessible; only cross-user access is denied.
+    """
+    try:
+        owner = run_manager.owner_of(run_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="run not found")
+    uid = get_user_id(request)
+    if owner is not None and uid is not None and owner != uid:
+        raise HTTPException(status_code=404, detail="run not found")
 
 
 class StartRunRequest(BaseModel):
@@ -37,21 +54,23 @@ class ResumeRequest(BaseModel):
 
 
 @router.post("/runs")
-def start_run(req: StartRunRequest, background: BackgroundTasks) -> dict:
+def start_run(req: StartRunRequest, background: BackgroundTasks, request: Request) -> dict:
     """Register a run and drive it to the first gate in the background."""
-    run_id = run_manager.register()
+    require_owner(req.repository_id, request)
+    run_id = run_manager.register(owner_id=get_user_id(request), repository_id=req.repository_id)
     background.add_task(run_manager.begin, run_id, req.repository_id, req.repo_path)
     return {"run_id": run_id, "status": "running"}
 
 
 @router.get("/runs")
-def list_runs() -> dict:
-    """List all known runs (status / stage / pending gate), newest fields only."""
-    return {"runs": run_manager.list_runs()}
+def list_runs(request: Request) -> dict:
+    """List the caller's runs (status / stage / pending gate), newest fields only."""
+    return {"runs": run_manager.list_runs(owner_id=get_user_id(request))}
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: str) -> dict:
+def get_run(run_id: str, request: Request) -> dict:
+    _guard_run(run_id, request)
     try:
         return run_manager.get_run(run_id)
     except KeyError:
@@ -59,8 +78,9 @@ def get_run(run_id: str) -> dict:
 
 
 @router.get("/runs/{run_id}/graph")
-def get_run_graph(run_id: str) -> dict:
+def get_run_graph(run_id: str, request: Request) -> dict:
     """The run's live execution as a node graph: {run_id, status, stage, nodes, edges}."""
+    _guard_run(run_id, request)
     try:
         return run_manager.agent_graph(run_id)
     except KeyError:
@@ -68,8 +88,9 @@ def get_run_graph(run_id: str) -> dict:
 
 
 @router.delete("/runs/{run_id}")
-def delete_run(run_id: str) -> dict:
+def delete_run(run_id: str, request: Request) -> dict:
     """Delete a run and its live graph."""
+    _guard_run(run_id, request)
     try:
         run_manager.delete(run_id)
     except KeyError:
@@ -78,7 +99,8 @@ def delete_run(run_id: str) -> dict:
 
 
 @router.post("/runs/{run_id}/resume")
-def resume_run(run_id: str, req: ResumeRequest, background: BackgroundTasks) -> dict:
+def resume_run(run_id: str, req: ResumeRequest, background: BackgroundTasks, request: Request) -> dict:
+    _guard_run(run_id, request)
     try:
         run_manager.get_run(run_id)
     except KeyError:
@@ -88,8 +110,9 @@ def resume_run(run_id: str, req: ResumeRequest, background: BackgroundTasks) -> 
 
 
 @router.get("/runs/{run_id}/events")
-async def run_events(run_id: str) -> StreamingResponse:
+async def run_events(run_id: str, request: Request) -> StreamingResponse:
     """Server-sent events: replays existing events then tails new ones until complete."""
+    _guard_run(run_id, request)
     try:
         run_manager.get_run(run_id)
     except KeyError:

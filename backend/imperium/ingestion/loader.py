@@ -22,8 +22,11 @@ class LoadedRepo:
     languages: list[str]
 
 
-def load_repository(repo_url: str | None, ref: str = "HEAD") -> LoadedRepo:
-    """Clone or accept a repository and persist a Repository row to Postgres."""
+def load_repository(repo_url: str | None, ref: str = "HEAD", owner_id: str | None = None) -> LoadedRepo:
+    """Clone or accept a repository and persist a Repository row to Postgres.
+
+    owner_id: Supabase user id (JWT `sub`) that owns this repo — anchors per-user RLS.
+    """
     settings = get_settings()
     repo_id = str(uuid.uuid4())
     workspace = os.path.join(settings.workspace_dir, repo_id)
@@ -56,7 +59,7 @@ def load_repository(repo_url: str | None, ref: str = "HEAD") -> LoadedRepo:
 
         session = get_session()
         try:
-            upsert_repository(session, repo_id, repo_url, ref, languages)
+            upsert_repository(session, repo_id, repo_url, ref, languages, owner_id=owner_id)
         finally:
             session.close()
         log.info("Persisted repository %s to RKB", repo_id)

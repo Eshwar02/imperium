@@ -138,6 +138,24 @@ class Orchestrator:
                 results["summaries_embedded"] = len(texts)
         except Exception as exc:  # noqa: BLE001
             log.warning("Module embedding failed: %s", exc)
+            summaries = {}
+
+        # 4b. Persist module rows → Postgres (so priority/comprehension can join on
+        # modules, and per-module comprehension scores have a home). Idempotent upsert.
+        try:
+            from imperium.rkb.store import get_session, upsert_module
+
+            if summaries:
+                sess = get_session()
+                try:
+                    for path, summary in list(summaries.items())[:200]:
+                        name = path.rsplit("/", 1)[-1] or path
+                        upsert_module(sess, repository_id, name=name, path=path, summary=summary)
+                finally:
+                    sess.close()
+                results["modules_persisted"] = min(len(summaries), 200)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Module persist failed: %s", exc)
 
         # 5. Compute priority scores
         try:

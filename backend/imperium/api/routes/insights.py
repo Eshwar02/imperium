@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
+from imperium.api.ownership import require_owner
 from imperium.core.healing import heal_call
 
 log = logging.getLogger("imperium.api.insights")
@@ -44,8 +45,9 @@ def _session_query(fn, *args):
 # ── graph ─────────────────────────────────────────────────────────────────────
 
 @router.get("/graph/{repository_id}")
-def get_graph(repository_id: str, layer: str = "all") -> dict:
+def get_graph(repository_id: str, request: Request, layer: str = "all") -> dict:
     """Return a graph layer ({nodes, edges}). layer: call|dependency|api|data|arch|all."""
+    require_owner(repository_id, request)
     rels = _LAYER_RELS.get(layer, None)
 
     def _run():
@@ -57,7 +59,11 @@ def get_graph(repository_id: str, layer: str = "all") -> dict:
 
 
 @router.get("/graph/{repository_id}/blast/{node_id}")
-def get_blast_radius(repository_id: str, node_id: str, depth: int = 3) -> dict:
+def get_blast_radius(
+    repository_id: str, node_id: str, request: Request, depth: int = 3
+) -> dict:
+    require_owner(repository_id, request)
+
     def _run():
         from imperium.rkb.graph import blast_radius
 
@@ -69,7 +75,8 @@ def get_blast_radius(repository_id: str, node_id: str, depth: int = 3) -> dict:
 # ── hierarchy + relational reads ──────────────────────────────────────────────
 
 @router.get("/hierarchy/{repository_id}")
-def get_hierarchy(repository_id: str) -> dict:
+def get_hierarchy(repository_id: str, request: Request) -> dict:
+    require_owner(repository_id, request)
     from imperium.rkb.store import get_modules
 
     modules = _session_query(get_modules, repository_id)
@@ -89,7 +96,8 @@ def get_hierarchy(repository_id: str) -> dict:
 
 
 @router.get("/business-rules/{repository_id}")
-def get_rules(repository_id: str) -> dict:
+def get_rules(repository_id: str, request: Request) -> dict:
+    require_owner(repository_id, request)
     from imperium.rkb.store import get_business_rules
 
     rules = _session_query(get_business_rules, repository_id)
@@ -108,7 +116,8 @@ def get_rules(repository_id: str) -> dict:
 
 
 @router.get("/priorities/{repository_id}")
-def get_priorities_route(repository_id: str) -> dict:
+def get_priorities_route(repository_id: str, request: Request) -> dict:
+    require_owner(repository_id, request)
     from imperium.rkb.store import get_priorities
 
     rows = _session_query(get_priorities, repository_id)
@@ -125,7 +134,8 @@ def get_priorities_route(repository_id: str) -> dict:
 
 
 @router.get("/changesets/{repository_id}")
-def get_changesets_route(repository_id: str) -> dict:
+def get_changesets_route(repository_id: str, request: Request) -> dict:
+    require_owner(repository_id, request)
     from imperium.rkb.store import get_changesets
 
     rows = _session_query(get_changesets, repository_id)
@@ -143,7 +153,8 @@ def get_changesets_route(repository_id: str) -> dict:
 
 
 @router.get("/simulations/{repository_id}")
-def get_simulations_route(repository_id: str) -> dict:
+def get_simulations_route(repository_id: str, request: Request) -> dict:
+    require_owner(repository_id, request)
     from imperium.rkb.store import get_simulations
 
     rows = _session_query(get_simulations, repository_id)
@@ -162,7 +173,8 @@ def get_simulations_route(repository_id: str) -> dict:
 
 
 @router.get("/timeline/{repository_id}")
-def get_timeline_route(repository_id: str) -> dict:
+def get_timeline_route(repository_id: str, request: Request) -> dict:
+    require_owner(repository_id, request)
     from imperium.rkb.store import get_timeline
 
     rows = _session_query(get_timeline, repository_id)

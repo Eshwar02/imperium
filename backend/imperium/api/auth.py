@@ -36,3 +36,12 @@ async def verify_jwt(request: Request) -> dict:
 
     request.state.user = payload
     return payload
+
+
+def get_user_id(request: Request) -> str | None:
+    """Return the authenticated Supabase user id (JWT `sub`), or None.
+
+    Use in routes to owner-scope RKB rows: repositories.owner_id = get_user_id(request).
+    """
+    user = getattr(request.state, "user", None)
+    return user.get("sub") if isinstance(user, dict) else None

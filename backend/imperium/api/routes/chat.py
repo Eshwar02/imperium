@@ -9,9 +9,11 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from imperium.api.ownership import require_owner
 
 log = logging.getLogger("imperium.api.chat")
 
@@ -52,8 +54,9 @@ def _context_block(sources: list[dict]) -> str:
 
 
 @router.post("/chat/{repository_id}")
-def chat(repository_id: str, req: ChatRequest) -> StreamingResponse:
+def chat(repository_id: str, req: ChatRequest, request: Request) -> StreamingResponse:
     """Stream a grounded answer as SSE: a `sources` event, then `token`s, then `done`."""
+    require_owner(repository_id, request)
     sources = _retrieve(repository_id, req.query, req.top_k)
 
     def gen():

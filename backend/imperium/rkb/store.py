@@ -75,15 +75,25 @@ def ping() -> dict[str, str]:
 
 # ── Repository helpers ────────────────────────────────────────────────────────
 
-def upsert_repository(session: Session, repo_id: str, url: str | None, ref: str, languages: list[str]) -> Repository:
+def upsert_repository(
+    session: Session,
+    repo_id: str,
+    url: str | None,
+    ref: str,
+    languages: list[str],
+    owner_id: str | None = None,
+) -> Repository:
     obj = session.get(Repository, repo_id)
     if obj is None:
-        obj = Repository(id=repo_id, url=url, ref=ref, languages=languages)
+        obj = Repository(id=repo_id, url=url, ref=ref, languages=languages, owner_id=owner_id)
         session.add(obj)
     else:
         obj.url = url
         obj.ref = ref
         obj.languages = languages
+        # Only set owner on first claim — never reassign an existing repo's owner.
+        if owner_id and obj.owner_id is None:
+            obj.owner_id = owner_id
     session.commit()
     return obj
 

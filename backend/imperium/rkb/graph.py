@@ -60,11 +60,14 @@ def blast_radius(function_id: str, depth: int = 3) -> list[dict]:
     Traverses CALLS and DEPENDS_ON edges in reverse direction.
     Returns list of {id, kind, name, hops}.
     """
+    # Neo4j rejects a parameterized variable-length upper bound ($depth) inside the
+    # pattern, so inline it — validated as a positive int to keep the query safe.
+    depth = max(1, int(depth))
     driver = _driver()
     with driver.session() as session:
         result = session.run(
-            """
-            MATCH path = (start {id: $fid})<-[:CALLS|DEPENDS_ON*1..$depth]-(dependent)
+            f"""
+            MATCH path = (start {{id: $fid}})<-[:CALLS|DEPENDS_ON*1..{depth}]-(dependent)
             RETURN DISTINCT
                 dependent.id AS id,
                 labels(dependent)[0] AS kind,
@@ -73,7 +76,6 @@ def blast_radius(function_id: str, depth: int = 3) -> list[dict]:
             ORDER BY hops
             """,
             fid=function_id,
-            depth=depth,
         )
         return [dict(record) for record in result]
 

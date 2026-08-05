@@ -13,12 +13,13 @@ from __future__ import annotations
 import json
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from imperium.agents.base import AgentContext
 from imperium.agents.code_agent import CodeAgent
+from imperium.api.ownership import require_owner
 
 router = APIRouter(tags=["code"])
 
@@ -49,8 +50,9 @@ def _ctx(repository_id: str, req: CodeRequest) -> AgentContext:
 
 
 @router.post("/code/{repository_id}")
-def code_task(repository_id: str, req: CodeRequest) -> dict:
+def code_task(repository_id: str, req: CodeRequest, request: Request) -> dict:
     """Run a coding task and return {applied, summary, branch, files_changed, diff, plan, tests}."""
+    require_owner(repository_id, request)
     from imperium.core.healing import heal_call
 
     return heal_call(
@@ -66,8 +68,9 @@ def code_task(repository_id: str, req: CodeRequest) -> dict:
 
 
 @router.post("/code/{repository_id}/plan")
-def code_plan(repository_id: str, req: CodeRequest) -> dict:
+def code_plan(repository_id: str, req: CodeRequest, request: Request) -> dict:
     """Produce a multi-file refactor plan (no edits): {steps: [{file, action, rationale}], summary}."""
+    require_owner(repository_id, request)
     from imperium.core.healing import heal_call
 
     return heal_call(
@@ -80,11 +83,12 @@ def code_plan(repository_id: str, req: CodeRequest) -> dict:
 
 
 @router.post("/code/{repository_id}/graph")
-def code_graph(repository_id: str, req: CodeRequest) -> dict:
+def code_graph(repository_id: str, req: CodeRequest, request: Request) -> dict:
     """Lay out the task as a node graph via the small ``graph`` agent (dashed dep edges).
 
     Uses ``req.steps`` if provided; otherwise plans first. Returns ``{nodes, edges}``.
     """
+    require_owner(repository_id, request)
     from imperium.agents.graph_agent import GraphAgent
     from imperium.core.healing import heal_call
 
@@ -98,8 +102,9 @@ def code_graph(repository_id: str, req: CodeRequest) -> dict:
 
 
 @router.post("/code/{repository_id}/stream")
-def code_stream(repository_id: str, req: CodeRequest) -> StreamingResponse:
+def code_stream(repository_id: str, req: CodeRequest, request: Request) -> StreamingResponse:
     """Stream the agent's plan, tool-calls, tests, and final diff as Server-Sent Events."""
+    require_owner(repository_id, request)
     ctx = _ctx(repository_id, req)
 
     def gen():

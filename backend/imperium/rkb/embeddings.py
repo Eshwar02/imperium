@@ -17,7 +17,7 @@ from imperium.config import get_settings
 
 log = logging.getLogger("imperium.rkb.embeddings")
 
-_VECTOR_SIZE = 1536  # text-embedding-3-small / compatible
+_VECTOR_SIZE = 1024  # mistral-embed dimensionality (see _embed)
 
 
 @lru_cache
@@ -41,6 +41,8 @@ def _ensure_collection() -> None:
 
     client = _client()
     settings = get_settings()
+    from qdrant_client.http.models import PayloadSchemaType
+
     existing = {c.name for c in client.get_collections().collections}
     if settings.qdrant_collection not in existing:
         client.create_collection(
@@ -48,6 +50,17 @@ def _ensure_collection() -> None:
             vectors_config=VectorParams(size=_VECTOR_SIZE, distance=Distance.COSINE),
         )
         log.info("Created Qdrant collection %s", settings.qdrant_collection)
+
+    # Payload index on repository_id is required for filtered search/count/delete
+    # (Qdrant returns 400 on filtered ops without it). Idempotent.
+    try:
+        client.create_payload_index(
+            collection_name=settings.qdrant_collection,
+            field_name="repository_id",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+    except Exception:  # noqa: BLE001 — already exists / race; safe to ignore
+        pass
 
 
 def _embed(text: str) -> list[float]:
@@ -137,14 +150,15 @@ def search(
     query_vector = _embed(query)
     qdrant_filter = _payload_to_filter(filters) if filters else None
 
-    results = client.search(
+    # qdrant-client >=1.10 removed `.search()` in favour of `.query_points()`.
+    response = client.query_points(
         collection_name=settings.qdrant_collection,
-        query_vector=query_vector,
+        query=query_vector,
         query_filter=qdrant_filter,
         limit=top_k,
         with_payload=True,
     )
-    return [{"score": hit.score, "payload": hit.payload} for hit in results]
+    return [{"score": hit.score, "payload": hit.payload} for hit in response.points]
 
 
 def delete_by_repository(repository_id: str) -> None:

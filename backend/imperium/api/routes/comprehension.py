@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from imperium.agents.base import AgentContext
 from imperium.agents.comprehension import ComprehensionAgent
+from imperium.api.ownership import require_owner
 from imperium.core.healing import heal_call
 
 log = logging.getLogger("imperium.api.comprehension")
@@ -29,8 +30,9 @@ class ComprehensionAnswer(BaseModel):
 
 
 @router.get("/comprehension/{repository_id}")
-def get_comprehension(repository_id: str) -> dict:
+def get_comprehension(repository_id: str, request: Request) -> dict:
     """Return comprehension checks for recent gate-B changes + per-module scores."""
+    require_owner(repository_id, request)
 
     def _checks() -> list[dict]:
         agent = ComprehensionAgent()
@@ -63,8 +65,11 @@ def get_comprehension(repository_id: str) -> dict:
 
 
 @router.post("/comprehension/{repository_id}/answer")
-def answer_comprehension(repository_id: str, ans: ComprehensionAnswer) -> dict:
+def answer_comprehension(
+    repository_id: str, ans: ComprehensionAnswer, request: Request
+) -> dict:
     """Record a comprehension score for a module; unflag it if understanding is adequate."""
+    require_owner(repository_id, request)
 
     def _run() -> dict:
         from imperium.rkb.store import get_modules, get_session

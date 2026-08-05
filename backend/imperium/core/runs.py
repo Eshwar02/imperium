@@ -37,8 +37,12 @@ class RunManager:
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
-    def register(self) -> str:
-        """Create a run entry (status=running) and return its id — does not drive it."""
+    def register(self, owner_id: str | None = None, repository_id: str | None = None) -> str:
+        """Create a run entry (status=running) and return its id — does not drive it.
+
+        owner_id: Supabase user id that owns this run, so the API can scope
+        list/get/delete/resume to the caller. None = unclaimed (dev/system).
+        """
         run_id = uuid.uuid4().hex
         with self._lock:
             self._runs[run_id] = {
@@ -46,6 +50,8 @@ class RunManager:
                 "stage": "build_kb",
                 "progress": {},
                 "pending": None,
+                "owner_id": owner_id,
+                "repository_id": repository_id,
                 "events": [],
             }
         return run_id
@@ -54,11 +60,21 @@ class RunManager:
         """Drive a registered run from the start to its first gate/completion."""
         self._drive(run_id, {"repository_id": repository_id, "repo_path": repo_path})
 
-    def start_run(self, repository_id: str, repo_path: str = "") -> str:
+    def start_run(
+        self, repository_id: str, repo_path: str = "", owner_id: str | None = None
+    ) -> str:
         """Register and drive a run synchronously (convenience; API uses register+begin)."""
-        run_id = self.register()
+        run_id = self.register(owner_id=owner_id, repository_id=repository_id)
         self.begin(run_id, repository_id, repo_path)
         return run_id
+
+    def owner_of(self, run_id: str) -> str | None:
+        """Return the owner id of a run (None if unclaimed). Raises KeyError if unknown."""
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                raise KeyError(run_id)
+            return run.get("owner_id")
 
     def resume_gate(self, run_id: str, votes: dict) -> dict:
         """Resume a run paused at a gate with the human's votes; drive to the next stop."""
@@ -81,12 +97,18 @@ class RunManager:
             run = self._runs.get(run_id)
             return list(run["events"]) if run else []
 
-    def list_runs(self) -> list[dict]:
-        """Summaries of every known run (newest fields, no event log)."""
+    def list_runs(self, owner_id: str | None = None) -> list[dict]:
+        """Summaries of every known run (no event log).
+
+        owner_id: when given, return only runs owned by that user (plus unclaimed
+        runs whose owner_id is None). When None, return all — callers that need
+        isolation must pass the authenticated user id.
+        """
         with self._lock:
             return [
                 {k: v for k, v in run.items() if k != "events"} | {"run_id": rid}
                 for rid, run in self._runs.items()
+                if owner_id is None or run.get("owner_id") in (None, owner_id)
             ]
 
     def delete(self, run_id: str) -> None:

@@ -88,18 +88,141 @@ _PATTERNS: dict[str, list[tuple[re.Pattern, str]]] = {
 }
 
 
+# Call-site detection: `name(` or `obj.name(` — captures the (final) callee name.
+# Excludes control-flow keywords that look like calls (if/for/while/return/…).
+_CALL_RE = re.compile(r"(?:\b(\w+)\s*\.\s*)?\b(\w+)\s*\(")
+_CALL_KEYWORDS = frozenset({
+    "if", "for", "while", "return", "with", "elif", "except", "print",
+    "def", "class", "and", "or", "not", "in", "is", "assert", "raise",
+    "yield", "await", "lambda", "super", "switch", "catch", "function",
+})
+
+
+def _collect_call_children(body_lines: list[tuple[int, str]]) -> list[AstNode]:
+    """Extract call-site AstNodes ('call' kind) from a block of (lineno, text) lines."""
+    calls: list[AstNode] = []
+    seen: set[str] = set()
+    for lineno, text in body_lines:
+        for m in _CALL_RE.finditer(text):
+            attr_owner, callee = m.group(1), m.group(2)
+            # Prefer the attribute/method name; both plain foo() and obj.foo().
+            name = callee
+            if not name or name in _CALL_KEYWORDS:
+                continue
+            key = f"{name}:{lineno}"
+            if key in seen:
+                continue
+            seen.add(key)
+            calls.append(AstNode(kind="call", name=name, span=(lineno, lineno)))
+    return calls
+
+
+def _python_indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" \t"))
+
+
+def _regex_build_python(parsed: ParsedFile) -> AstNode:
+    """Indentation-aware Python fallback: proper def/class spans + nested call sites."""
+    root = AstNode(kind="module", name=parsed.path, span=(1, max(len(parsed.lines), 1)))
+    lines = parsed.lines
+    class_re = _PATTERNS["python"][0][0]
+    def_re = _PATTERNS["python"][1][0]
+    import_re1 = _PATTERNS["python"][2][0]
+    import_re2 = _PATTERNS["python"][3][0]
+
+    n = len(lines)
+    i = 0
+    while i < n:
+        line = lines[i]
+        lineno = i + 1
+        stripped = line.strip()
+
+        # Imports (top-level only, cheap)
+        if import_re2.search(line) or import_re1.search(line):
+            m = import_re2.search(line) or import_re1.search(line)
+            root.children.append(AstNode(kind="import", name=m.group(1).strip(), span=(lineno, lineno)))
+            i += 1
+            continue
+
+        m_class = class_re.search(line)
+        m_def = def_re.search(line)
+        if m_class or m_def:
+            kind = "class" if m_class else "function"
+            name = (m_class or m_def).group(1).strip()
+            header_indent = _python_indent(line)
+            # Find end of block: next line at <= header_indent that is non-blank.
+            j = i + 1
+            while j < n:
+                nxt = lines[j]
+                if nxt.strip() and _python_indent(nxt) <= header_indent:
+                    break
+                j += 1
+            span = (lineno, j)  # 1-based inclusive end
+            node = AstNode(kind=kind, name=name, span=span)
+            body = [(k + 1, lines[k]) for k in range(i + 1, j)]
+            # Methods = defs nested inside a class; recurse one level for classes.
+            if kind == "class":
+                node.children.extend(_regex_scan_block(body, "python", header_indent))
+            else:
+                node.children.extend(_collect_call_children(body))
+            root.children.append(node)
+            i = j
+            continue
+        i += 1
+
+    return root
+
+
+def _regex_scan_block(body: list[tuple[int, str]], language: str, parent_indent: int) -> list[AstNode]:
+    """Scan a class body for methods (def) and their call sites."""
+    def_re = _PATTERNS["python"][1][0]
+    children: list[AstNode] = []
+    n = len(body)
+    i = 0
+    while i < n:
+        lineno, line = body[i]
+        m_def = def_re.search(line)
+        if m_def:
+            name = m_def.group(1).strip()
+            header_indent = _python_indent(line)
+            j = i + 1
+            while j < n:
+                _, nxt = body[j]
+                if nxt.strip() and _python_indent(nxt) <= header_indent:
+                    break
+                j += 1
+            method = AstNode(kind="method", name=name, span=(lineno, body[j - 1][0] if j <= n else lineno))
+            method.children.extend(_collect_call_children(body[i + 1:j]))
+            children.append(method)
+            i = j
+            continue
+        i += 1
+    return children
+
+
 def _regex_build(parsed: ParsedFile) -> AstNode:
+    if parsed.language == "python":
+        return _regex_build_python(parsed)
+
     root = AstNode(kind="module", name=parsed.path, span=(1, len(parsed.lines)))
     patterns = _PATTERNS.get(parsed.language, [])
 
+    current_def: AstNode | None = None
     for i, line in enumerate(parsed.lines, 1):
+        matched = False
         for pat, kind in patterns:
             m = pat.search(line)
             if m:
                 name = next((g for g in m.groups() if g), m.group(0)[:40])
-                root.children.append(AstNode(kind=kind, name=name.strip(), span=(i, i)))
+                node = AstNode(kind=kind, name=name.strip(), span=(i, i))
+                root.children.append(node)
+                if kind in ("function", "class"):
+                    current_def = node
+                matched = True
                 break
-
+        if not matched and current_def is not None:
+            # Attach call sites found in the body to the most recent definition.
+            current_def.children.extend(_collect_call_children([(i, line)]))
     return root
 
 
