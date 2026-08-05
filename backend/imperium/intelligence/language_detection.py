@@ -25,6 +25,8 @@ _EXT_LANG = {
     ".cbl": "cobol",
     ".cob": "cobol",
     ".cpy": "cobol",
+    ".jcl": "jcl",
+    ".job": "jcl",
 }
 # Manifest filename → language it signals (a present manifest boosts that language).
 _MANIFEST_LANG = {
