@@ -139,6 +139,43 @@ def _extract_generic_candidates(source: str, file_path: str) -> list[RuleCandida
     return candidates
 
 
+# ── COBOL heuristics ──────────────────────────────────────────────────────────
+
+_COBOL_88_RE = re.compile(r"^\s*88\s+([A-Z0-9-]+)\s+VALUE", re.IGNORECASE | re.MULTILINE)
+_COBOL_IF_RE = re.compile(r"\bIF\s+(.+?)(?:\bTHEN\b|$)", re.IGNORECASE | re.MULTILINE)
+
+
+def _extract_cobol_candidates(source: str, file_path: str) -> list[RuleCandidate]:
+    """Regex-scan COBOL for 88-level condition names and IF business guards."""
+    candidates: list[RuleCandidate] = []
+
+    for m in _COBOL_88_RE.finditer(source):
+        line = source[:m.start()].count("\n") + 1
+        name = m.group(1).upper()
+        candidates.append(RuleCandidate(
+            file_path=file_path,
+            line=line,
+            code_snippet=f"88-level condition name {name}: {m.group(0).strip()}",
+            hint="cobol_condition_name",
+            confidence=0.6,
+        ))
+
+    for m in _COBOL_IF_RE.finditer(source):
+        line = source[:m.start()].count("\n") + 1
+        cond = m.group(1).strip()
+        if not cond:
+            continue
+        candidates.append(RuleCandidate(
+            file_path=file_path,
+            line=line,
+            code_snippet=f"IF guard on condition: {cond}",
+            hint="cobol_guard",
+            confidence=0.5,
+        ))
+
+    return candidates
+
+
 # ── LLM enrichment ────────────────────────────────────────────────────────────
 
 _ENRICH_SYSTEM = (
@@ -208,6 +245,8 @@ def _scan_file(file_path: str) -> list[RuleCandidate]:
 
     if file_path.endswith(".py"):
         return _extract_python_candidates(source, file_path)
+    if file_path.lower().endswith((".cbl", ".cob", ".cpy")):
+        return _extract_cobol_candidates(source, file_path)
     return _extract_generic_candidates(source, file_path)
 
 

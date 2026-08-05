@@ -12,6 +12,7 @@ Full pipeline implementation:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -26,8 +27,22 @@ from imperium.agents.security import SecurityAgent
 from imperium.agents.structure import StructureAgent
 from imperium.agents.testing import TestingAgent
 from imperium.api.schemas import AnalysisResponse, Category, Finding, GateDecision, GateRequest
+from imperium.rkb.graph import write_call_graph
 
 log = logging.getLogger("imperium.core.orchestrator")
+
+# Frontend edge ``type`` → target node ``kind`` for the bare names those edges point at.
+_EDGE_TARGET_KIND = {
+    "COPIES": "Copybook",
+    "READS": "Db2Table",
+    "WRITES": "Db2Table",
+    "EXPOSES": "CicsTransaction",
+    "RUNS": "Program",
+    "USES_DATASET": "Dataset",
+    "CALLS": "Program",
+    "PERFORMS": "Paragraph",
+    "GOES_TO": "Paragraph",
+}
 
 # Latest completed analysis per repository, so GET /analysis can return the real
 # result without re-running the pipeline. Process-local by design: analyses are
@@ -111,6 +126,34 @@ class Orchestrator:
             results["multigraph"] = mg["counts"]
         except Exception as exc:  # noqa: BLE001
             log.warning("Multigraph build failed: %s", exc)
+
+        # 2c. Build legacy-language (COBOL/JCL) call graph → Neo4j
+        try:
+            from imperium.intelligence.language_detection import detect_detailed
+
+            legacy_langs = {"cobol", "jcl"}
+            legacy_paths: list[str] = []
+            try:
+                import os
+
+                _detected = {d["language"] for d in detect_detailed(repo_path)}
+                if legacy_langs & _detected:
+                    from imperium.intelligence.language_detection import _EXT_LANG, _SKIP_DIRS
+
+                    for root, dirs, files in os.walk(repo_path):
+                        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+                        for name in files:
+                            lang = _EXT_LANG.get(os.path.splitext(name)[1].lower())
+                            if lang in legacy_langs:
+                                legacy_paths.append(os.path.join(root, name))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Legacy file discovery failed: %s", exc)
+
+            if legacy_paths:
+                legacy = _build_legacy_graph(repository_id, legacy_paths, repo_path)
+                results.update(legacy)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Legacy graph build failed: %s", exc)
 
         # 3. Build timeline → Postgres + Qdrant
         try:
@@ -426,3 +469,116 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001
             log.warning("pending_clarifications failed: %s", exc)
             return []
+
+
+# ── Legacy-language graph build (COBOL/JCL → Neo4j) ───────────────────────────
+
+def _build_legacy_graph(
+    repository_id: str, file_paths: list[str], repo_path: str
+) -> dict:
+    """Feed legacy-language files (COBOL/JCL) into the Neo4j call graph.
+
+    Modules/paragraphs/steps become nodes; PERFORM/CALL/GO TO plus frontend
+    relations (COPIES/READS/WRITES/EXPOSES/RUNS/USES_DATASET) become edges.
+    Returns ``{legacy_files, legacy_nodes, legacy_edges}``.
+    """
+    import os
+
+    from imperium.intelligence.frontends import get_frontend, has_frontend
+    from imperium.intelligence.language_detection import _EXT_LANG
+
+    def nid(key: str) -> str:
+        return hashlib.md5(key.encode()).hexdigest()[:16]
+
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+    n_files = 0
+
+    def add_node(node_id: str, kind: str, name: str) -> None:
+        if node_id not in nodes:
+            nodes[node_id] = {
+                "id": node_id,
+                "kind": kind,
+                "name": name,
+                "repository_id": repository_id,
+            }
+
+    def bare_target(etype: str, name: str) -> str:
+        kind = _EDGE_TARGET_KIND.get(etype, "Program")
+        tid = nid(f"{etype}:{name}")
+        add_node(tid, kind, name)
+        return tid
+
+    for path in file_paths:
+        language = _EXT_LANG.get(os.path.splitext(path)[1].lower())
+        if not language or not has_frontend(language):
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                src = fh.read()
+            fe = get_frontend(language)
+            root = fe.structure(path, src)
+
+            # Module/program root node.
+            root_kind = "Program" if language == "cobol" else "JclJob"
+            root_id = nid(f"{path}:{root.name}:{root.kind}")
+            add_node(root_id, root_kind, root.name)
+
+            # Paragraph / step nodes, indexed by name for sibling resolution.
+            para_ids: dict[str, str] = {}
+            para_kind = "Paragraph" if language == "cobol" else "JclStep"
+            for child in root.children:
+                if child.kind != "function":
+                    continue
+                cid = nid(f"{path}:{child.name}:{child.kind}")
+                add_node(cid, para_kind, child.name)
+                para_ids[child.name] = cid
+
+            # Call children (PERFORM / CALL / GO TO) → edges.
+            for child in root.children:
+                if child.kind != "function":
+                    continue
+                src_id = para_ids[child.name]
+                for call in child.children:
+                    if call.kind != "call":
+                        continue
+                    ck = call.metadata.get("cobol_kind")
+                    if ck == "perform":
+                        etype = "PERFORMS"
+                    elif ck == "goto":
+                        etype = "GOES_TO"
+                    else:
+                        etype = "CALLS"
+                    # Resolve PERFORM/GO TO to a sibling paragraph; else bare node.
+                    if etype in ("PERFORMS", "GOES_TO") and call.name in para_ids:
+                        tgt_id = para_ids[call.name]
+                    else:
+                        tgt_id = bare_target(etype, call.name)
+                    edges.append({"source": src_id, "target": tgt_id, "type": etype})
+
+            # Frontend non-call edges (COPIES/READS/WRITES/EXPOSES/RUNS/…).
+            for e in fe.edges(path, root, src):
+                etype = e.get("type", "CALLS")
+                s_name = e.get("source", "")
+                t_name = e.get("target", "")
+                # Source is either a paragraph/step in this file or the program.
+                if s_name in para_ids:
+                    s_id = para_ids[s_name]
+                elif s_name == root.name:
+                    s_id = root_id
+                else:
+                    s_id = bare_target("CALLS", s_name)
+                t_id = bare_target(etype, t_name)
+                edges.append({"source": s_id, "target": t_id, "type": etype})
+
+            n_files += 1
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Legacy frontend failed for %s: %s", path, exc)
+
+    node_list = list(nodes.values())
+    write_call_graph(repository_id, node_list, edges)
+    return {
+        "legacy_files": n_files,
+        "legacy_nodes": len(node_list),
+        "legacy_edges": len(edges),
+    }
