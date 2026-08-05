@@ -127,7 +127,11 @@ def upsert(texts: list[str], payloads: list[dict]) -> None:
         vector = _embed(text)
         # Deterministic point ID from content hash so re-upserts are idempotent
         point_id = int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**63)
-        points.append(PointStruct(id=point_id, vector=vector, payload=payload))
+        # Persist the source text in the payload so retrieval (RAG/chat) can surface
+        # readable content, not just metadata. Callers may override via an explicit
+        # "text"/"statement" key.
+        stored = payload if ("text" in payload or "statement" in payload) else {**payload, "text": text}
+        points.append(PointStruct(id=point_id, vector=vector, payload=stored))
 
     client.upsert(collection_name=settings.qdrant_collection, points=points)
     log.debug("Upserted %d vectors into %s", len(points), settings.qdrant_collection)
