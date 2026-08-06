@@ -11,6 +11,7 @@ from imperium.api.routes import (
     chat,
     code,
     comprehension,
+    files,
     gates,
     health,
     ingest,
@@ -43,6 +44,7 @@ app.include_router(insights.router, prefix="/api", dependencies=_auth)
 app.include_router(code.router, prefix="/api", dependencies=_auth)
 app.include_router(comprehension.router, prefix="/api", dependencies=_auth)
 app.include_router(chat.router, prefix="/api", dependencies=_auth)
+app.include_router(files.router, prefix="/api", dependencies=_auth)
 
 
 @app.get("/", tags=["meta"])
