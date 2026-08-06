@@ -21,6 +21,7 @@ export interface Priority { file_path: string; score: number; [k: string]: unkno
 export interface Decision { category?: string; change_summary?: string; verdict?: string; approver?: string; gate?: string; created_at?: string; [k: string]: unknown }
 export interface TimelineEvent { commit_sha: string; summary: string; author: string }
 export interface Clarification { rule_id?: string; id?: string; statement?: string; hitl_question?: string; confidence?: number }
+export interface FileNode { name: string; path: string; type: "file" | "dir"; children?: FileNode[] }
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -125,6 +126,12 @@ export const api = {
 
   chat: (id: string, query: string, onChunk: (s: string) => void, signal?: AbortSignal) =>
     streamPost(`/api/chat/${id}`, { query, top_k: 8 }, onChunk, signal),
+
+  fileTree: (id: string) => get<{ repository_id: string; root: string; tree: FileNode[] }>(`/api/files/${id}/tree`),
+  fileContent: (id: string, path: string) =>
+    get<{ path: string; size: number; binary: boolean; content: string }>(
+      `/api/files/${id}/content?path=${encodeURIComponent(path)}`,
+    ),
 
   startRun: (repository_id: string, repo_path = "") => post<{ run_id: string; status: string }>(`/api/runs`, { repository_id, repo_path }),
   getRun: (runId: string) => get<Record<string, unknown>>(`/api/runs/${runId}`),
