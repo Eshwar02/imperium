@@ -20,11 +20,26 @@ log = logging.getLogger("imperium.api.chat")
 router = APIRouter(tags=["chat"])
 
 _CHAT_SYSTEM = (
-    "You are Imperium's codebase copilot. Answer the user's question about this "
-    "repository using ONLY the retrieved context below. Cite the sources you used by "
-    "their [n] index. If the context is insufficient, say so plainly rather than "
-    "guessing."
+    "You are Imperium's codebase copilot for a single repository. "
+    "Be concise and conversational. If the user just greets you or makes small talk, "
+    "greet them back in one short sentence and invite a question about the repo — do "
+    "NOT lecture about missing context. "
+    "When retrieved context is provided, ground your answer in it and cite sources by "
+    "their [n] index. If a real question needs context that isn't present, say so in one "
+    "sentence rather than guessing or padding."
 )
+
+# Words that indicate the user is just saying hi, not asking about the repo. Kept
+# tiny on purpose — a greeting shouldn't require any repository context to answer.
+_GREETINGS = {
+    "hi", "hey", "hello", "yo", "hiya", "howdy", "sup", "hey!", "hi!", "hello!",
+    "good morning", "good afternoon", "good evening", "thanks", "thank you", "ok",
+    "okay", "cool", "nice", "test", "ping",
+}
+
+
+def _is_smalltalk(query: str) -> bool:
+    return query.strip().lower().strip("?.! ") in _GREETINGS
 
 
 class ChatRequest(BaseModel):
@@ -57,7 +72,32 @@ def _context_block(sources: list[dict]) -> str:
 def chat(repository_id: str, req: ChatRequest, request: Request) -> StreamingResponse:
     """Stream a grounded answer as SSE: a `sources` event, then `token`s, then `done`."""
     require_owner(repository_id, request)
-    sources = _retrieve(repository_id, req.query, req.top_k)
+
+    from imperium.rkb.embeddings import count_by_repository
+
+    smalltalk = _is_smalltalk(req.query)
+    indexed = count_by_repository(repository_id)
+    # Only hit the vector store when there's something indexed and a real question.
+    sources = [] if (smalltalk or indexed == 0) else _retrieve(repository_id, req.query, req.top_k)
+
+    def _say(msg: str):
+        """Stream a canned message as tokens then close — no LLM call needed."""
+        yield f"data: {json.dumps({'type': 'sources', 'sources': []})}\n\n"
+        yield f"data: {json.dumps({'type': 'token', 'text': msg})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    # Repo has no embeddings yet — tell the user plainly instead of letting the LLM
+    # emit a confusing "no context" wall of text. This is the common case right after
+    # ingest while the background knowledge-base build is still running.
+    if not smalltalk and indexed == 0:
+        return StreamingResponse(
+            _say(
+                "This repository isn't indexed yet, so I have nothing to answer from. "
+                "Indexing runs in the background after ingest and can take a few minutes "
+                "for a large repo — try again shortly. If it stays empty, re-ingest the repo."
+            ),
+            media_type="text/event-stream",
+        )
 
     def gen():
         # 1) hand the UI the citations up front so it can render clickable sources.
