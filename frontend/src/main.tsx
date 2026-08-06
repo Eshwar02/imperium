@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { RepoProvider } from "./context/RepoContext";
+import { WorkbenchProvider } from "./context/WorkbenchContext";
 import RequireAuth from "./components/RequireAuth";
 import App from "./App";
 import Login from "./pages/Login";
@@ -14,7 +15,9 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <RepoProvider>
-          <App />
+          <WorkbenchProvider>
+            <App />
+          </WorkbenchProvider>
         </RepoProvider>
       </RequireAuth>
     ),
