@@ -1,0 +1,105 @@
+// Editor group — open-file tabs plus the Monaco editor showing file content.
+import Editor from "@monaco-editor/react";
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
+import { useWorkbench } from "../../context/WorkbenchContext";
+import { fileIcon, monacoLanguage } from "../../lib/fileIcons";
+import { t } from "../../theme";
+
+export default function EditorArea() {
+  const { editors, activePath, setActivePath, closeFile } = useWorkbench();
+  // path -> { content, binary, loading, error }
+  const [cache, setCache] = useState<Record<string, { content: string; binary: boolean; loading: boolean; error?: string }>>({});
+
+  const active = editors.find((e) => e.path === activePath) ?? null;
+
+  useEffect(() => {
+    if (!active) return;
+    if (cache[active.path] && !cache[active.path].loading) return;
+    setCache((c) => ({ ...c, [active.path]: { content: "", binary: false, loading: true } }));
+    api.fileContent(active.repoId, active.path)
+      .then((r) => setCache((c) => ({ ...c, [active.path]: { content: r.content, binary: r.binary, loading: false } })))
+      .catch((e) => setCache((c) => ({ ...c, [active.path]: { content: "", binary: false, loading: false, error: String(e?.message ?? e) } })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.path, active?.repoId]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: t.bg }}>
+      {/* tab strip */}
+      <div style={{ display: "flex", background: "#0a0d12", borderBottom: `1px solid ${t.border}`,
+        overflowX: "auto", flexShrink: 0, minHeight: 35 }}>
+        {editors.map((e) => {
+          const sel = e.path === activePath;
+          return (
+            <div key={e.path} onClick={() => setActivePath(e.path)} title={e.path}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", fontSize: 13,
+                cursor: "pointer", whiteSpace: "nowrap", fontFamily: t.sans,
+                background: sel ? t.bg : "transparent", color: sel ? t.text : t.textDim,
+                borderRight: `1px solid ${t.border}`, borderTop: sel ? `1px solid ${t.accent}` : "1px solid transparent" }}>
+              <span>{fileIcon(e.name)}</span>
+              <span>{e.name}</span>
+              <span onClick={(ev) => { ev.stopPropagation(); closeFile(e.path); }}
+                style={{ marginLeft: 4, color: t.textDim, fontSize: 14, lineHeight: 1 }}
+                onMouseEnter={(ev) => (ev.currentTarget.style.color = t.text)}
+                onMouseLeave={(ev) => (ev.currentTarget.style.color = t.textDim)}>×</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* breadcrumb */}
+      {active && (
+        <div style={{ padding: "3px 14px", fontSize: 11, color: t.textDim, fontFamily: t.mono,
+          borderBottom: `1px solid ${t.border}`, background: t.bg }}>{active.path}</div>
+      )}
+
+      {/* body */}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {!active && <Welcome />}
+        {active && (() => {
+          const st = cache[active.path];
+          if (!st || st.loading) return <Center>Loading {active.name}…</Center>;
+          if (st.error) return <Center color={t.red}>Failed to open: {st.error}</Center>;
+          if (st.binary) return <Center>Binary file — cannot display.</Center>;
+          return (
+            <Editor
+              key={active.path}
+              height="100%"
+              theme="vs-dark"
+              path={active.path}
+              defaultLanguage={monacoLanguage(active.name)}
+              value={st.content}
+              options={{
+                readOnly: true, fontSize: 13, minimap: { enabled: true },
+                scrollBeyondLastLine: false, automaticLayout: true,
+                fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
+                renderWhitespace: "selection",
+              }}
+            />
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+function Center({ children, color = t.textDim }: { children: React.ReactNode; color?: string }) {
+  return <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color, fontSize: 13 }}>{children}</div>;
+}
+
+function Welcome() {
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", color: t.textDim, gap: 10 }}>
+      <div style={{ fontSize: 42, letterSpacing: 2, color: t.text, opacity: 0.85 }}>◆ IMPERIUM</div>
+      <div style={{ fontSize: 14 }}>Enterprise Knowledge Operating System</div>
+      <div style={{ fontSize: 12, marginTop: 8 }}>Open a file from the Explorer, or press <Kbd>Ctrl</Kbd>+<Kbd>P</Kbd> to search files.</div>
+      <div style={{ fontSize: 12 }}>Press <Kbd>Ctrl</Kbd>+<Kbd>Shift</Kbd>+<Kbd>P</Kbd> for the command palette · <Kbd>Ctrl</Kbd>+<Kbd>`</Kbd> for the panel.</div>
+    </div>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return <kbd style={{ background: t.bgElev, border: `1px solid ${t.border}`, borderRadius: 4,
+    padding: "1px 5px", fontSize: 11, fontFamily: t.mono, color: t.text }}>{children}</kbd>;
+}
