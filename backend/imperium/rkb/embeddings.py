@@ -125,8 +125,14 @@ def upsert(texts: list[str], payloads: list[dict]) -> None:
     points = []
     for i, (text, payload) in enumerate(zip(texts, payloads)):
         vector = _embed(text)
-        # Deterministic point ID from content hash so re-upserts are idempotent
-        point_id = int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**63)
+        # Deterministic point ID from repository_id + content so re-upserts are
+        # idempotent WITHIN a repo but never collide ACROSS repos. Hashing text
+        # alone (the old behaviour) let two repos with identical file content
+        # share a point id, so the later upsert overwrote the earlier point and
+        # silently reassigned it to a different repository_id — repos lost their
+        # vectors and chat returned empty sources. Scope the id by repository_id.
+        repo_key = str(payload.get("repository_id", ""))
+        point_id = int(hashlib.md5(f"{repo_key}\0{text}".encode()).hexdigest(), 16) % (2**63)
         # Persist the source text in the payload so retrieval (RAG/chat) can surface
         # readable content, not just metadata. Callers may override via an explicit
         # "text"/"statement" key.
@@ -163,6 +169,25 @@ def search(
         with_payload=True,
     )
     return [{"score": hit.score, "payload": hit.payload} for hit in response.points]
+
+
+def count_by_repository(repository_id: str) -> int:
+    """Number of indexed points for a repository (0 = not indexed yet). Safe on error."""
+    from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+
+    try:
+        _ensure_collection()
+        client = _client()
+        settings = get_settings()
+        return client.count(
+            collection_name=settings.qdrant_collection,
+            count_filter=Filter(
+                must=[FieldCondition(key="repository_id", match=MatchValue(value=repository_id))]
+            ),
+        ).count
+    except Exception as exc:  # noqa: BLE001
+        log.warning("count_by_repository failed for %s: %s", repository_id, exc)
+        return 0
 
 
 def delete_by_repository(repository_id: str) -> None:
