@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""  # required by Qdrant Cloud; empty = local (no auth)
     qdrant_collection: str = "imperium_rkb"
+    # Minimum cosine similarity for a retrieved chunk to count as relevant context.
+    # Qdrant always returns top_k nearest vectors regardless of quality, so off-topic
+    # queries otherwise surface noise (~0.55 for mistral-embed) that misleads the LLM.
+    chat_min_score: float = 0.6
 
     # Neo4j — RKB knowledge graph
     neo4j_uri: str = "bolt://localhost:7687"

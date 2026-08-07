@@ -48,11 +48,19 @@ class ChatRequest(BaseModel):
 
 
 def _retrieve(repository_id: str, query: str, top_k: int) -> list[dict]:
-    """Semantic search over the repository's slice of memory; empty on any failure."""
+    """Semantic search over the repository's slice of memory; empty on any failure.
+
+    Drops hits below `chat_min_score`: Qdrant always returns the top_k nearest vectors
+    even when they're irrelevant, so an off-topic query still yields weak matches that
+    would otherwise be fed to the LLM as if they were real context.
+    """
     try:
+        from imperium.config import get_settings
         from imperium.rkb.embeddings import search
 
-        return search(query, top_k=top_k, filters={"repository_id": repository_id})
+        min_score = get_settings().chat_min_score
+        hits = search(query, top_k=top_k, filters={"repository_id": repository_id})
+        return [h for h in hits if (h.get("score") or 0.0) >= min_score]
     except Exception as exc:  # noqa: BLE001
         log.warning("chat retrieval failed for %s: %s", repository_id, exc)
         return []
@@ -95,6 +103,19 @@ def chat(repository_id: str, req: ChatRequest, request: Request) -> StreamingRes
                 "This repository isn't indexed yet, so I have nothing to answer from. "
                 "Indexing runs in the background after ingest and can take a few minutes "
                 "for a large repo — try again shortly. If it stays empty, re-ingest the repo."
+            ),
+            media_type="text/event-stream",
+        )
+
+    # Repo is indexed but nothing cleared the relevance bar — the question is about
+    # something this repo doesn't cover. Say so in one line instead of grounding the LLM
+    # in noise, which produced rambling "I couldn't find X" answers over bogus sources.
+    if not smalltalk and not sources:
+        return StreamingResponse(
+            _say(
+                "I couldn't find anything relevant to that in this repository's indexed "
+                "knowledge. Try rephrasing, or ask about code, commits, or rules that "
+                "exist in this repo."
             ),
             media_type="text/event-stream",
         )
