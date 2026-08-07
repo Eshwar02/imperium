@@ -125,7 +125,14 @@ export const api = {
     post(`/api/comprehension/${id}/answer`, { module_path, comprehension_score }),
 
   chat: (id: string, query: string, onChunk: (s: string) => void, signal?: AbortSignal) =>
-    streamPost(`/api/chat/${id}`, { query, top_k: 8 }, onChunk, signal),
+    streamPost(`/api/chat/${id}`, { query, top_k: 8 }, (line) => {
+      // The backend streams JSON envelopes: {type:"token",text}, {type:"sources"},
+      // {type:"error",message}, {type:"done"}. Unwrap them so only prose reaches the bubble.
+      let ev: { type?: string; text?: string; message?: string };
+      try { ev = JSON.parse(line); } catch { return; }
+      if (ev.type === "token" && typeof ev.text === "string") onChunk(ev.text);
+      else if (ev.type === "error") onChunk(`⚠ ${ev.message ?? "chat failed"}`);
+    }, signal),
 
   fileTree: (id: string) => get<{ repository_id: string; root: string; tree: FileNode[] }>(`/api/files/${id}/tree`),
   fileContent: (id: string, path: string) =>
