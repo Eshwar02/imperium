@@ -8,7 +8,6 @@ import { t } from "../../theme";
 import { Btn } from "../ui";
 import Explorer from "./Explorer";
 
-import StructureMapPanel from "../panels/StructureMapPanel";
 import FindingsPanel from "../panels/FindingsPanel";
 import BusinessRulesPanel from "../panels/BusinessRulesPanel";
 import TimelinePanel from "../panels/TimelinePanel";
@@ -137,12 +136,29 @@ function Section({ title, defaultOpen, children }: { title: string; defaultOpen?
   );
 }
 
+function MapLauncher() {
+  const { openFile } = useWorkbench();
+  const { activeId } = useRepo();
+  return (
+    <div style={{ padding: "8px 12px", borderBottom: `1px solid ${t.border}` }}>
+      <button
+        disabled={!activeId}
+        onClick={() => activeId && openFile({ repoId: activeId, path: "::arch-map", name: "Architecture Map", kind: "graph" })}
+        style={{ width: "100%", background: t.bgElev, color: t.text, border: `1px solid ${t.border}`,
+          borderRadius: 6, padding: "8px 10px", fontSize: 12, fontFamily: t.sans, cursor: activeId ? "pointer" : "default", textAlign: "left" }}
+      >
+        ◈ Open Architecture Map ⬲
+      </button>
+    </div>
+  );
+}
+
 function IntelView() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={header}>Imperium Intelligence</div>
       <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        <Section title="Structure Map" defaultOpen><StructureMapPanel /></Section>
+        <MapLauncher />
         <Section title="Findings"><FindingsPanel /></Section>
         <Section title="Business Rules"><BusinessRulesPanel /></Section>
         <Section title="Timeline"><TimelinePanel /></Section>

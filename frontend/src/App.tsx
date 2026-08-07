@@ -94,10 +94,11 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
     { label: "View: Search", run: () => setView("search") },
     { label: "View: Source Control", run: () => setView("scm") },
     { label: "View: Imperium Intelligence", run: () => setView("intel") },
+    { label: "View: Architecture Map", run: () => { if (activeId) openFile({ repoId: activeId, path: "::arch-map", name: "Architecture Map", kind: "graph" }); } },
     { label: "Toggle Primary Sidebar", run: onToggleSidebar },
     { label: "Toggle Panel", run: onTogglePanel },
     { label: "Toggle Chat", run: onToggleChat },
-  ], [activeId]);
+  ], [activeId, openFile]);
 
   const term = q.replace(/^>/, "").trim().toLowerCase();
   const cmdResults = commands.filter((c) => c.label.toLowerCase().includes(term));
