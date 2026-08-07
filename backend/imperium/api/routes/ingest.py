@@ -30,11 +30,20 @@ def _build_kb(repository_id: str, repo_path: str) -> None:
 
 @router.get("/repositories")
 def list_repositories(request: Request) -> dict:
-    """List the caller's repositories (owner-scoped) so the UI can populate its rail."""
+    """List the caller's repositories (owner-scoped) so the UI can populate its rail.
+
+    Degrades to an empty list when the database is unreachable (e.g. CI, or a
+    transient outage) so the UI rail never 500s — matching the resilient
+    behaviour of the other read endpoints.
+    """
     from imperium.rkb.store import get_session, list_repositories as _list
 
     owner_id = get_user_id(request)
-    session = get_session()
+    try:
+        session = get_session()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("list_repositories: database unavailable: %s", exc)
+        return {"repositories": []}
     try:
         repos = _list(session, owner_id)
         return {
@@ -49,6 +58,9 @@ def list_repositories(request: Request) -> dict:
                 for r in repos
             ]
         }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("list_repositories: query failed: %s", exc)
+        return {"repositories": []}
     finally:
         session.close()
 
