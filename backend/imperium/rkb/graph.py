@@ -97,6 +97,17 @@ def get_node(node_id: str) -> dict | None:
         return dict(record["n"]) if record else None
 
 
+def _edge_dict(record) -> dict:
+    """Flatten a (source, target, type, props) edge record into one dict.
+
+    Relationship properties (e.g. method, route, label) are merged in so the
+    structure-map / architecture-map UI can label arrows with the API method.
+    """
+    edge = {"source": record["source"], "target": record["target"], "type": record["type"]}
+    edge.update(record["props"] or {})
+    return edge
+
+
 def repo_graph(repository_id: str) -> dict:
     """Return all nodes and edges for a repository as a structure map (React Flow)."""
     driver = _driver()
@@ -108,12 +119,12 @@ def repo_graph(repository_id: str) -> dict:
         edges_res = session.run(
             """
             MATCH (a {repository_id: $rid})-[r]->(b {repository_id: $rid})
-            RETURN a.id AS source, b.id AS target, type(r) AS type
+            RETURN a.id AS source, b.id AS target, type(r) AS type, properties(r) AS props
             """,
             rid=repository_id,
         )
         nodes = [dict(record["n"]) for record in nodes_res]
-        edges = [dict(record) for record in edges_res]
+        edges = [_edge_dict(record) for record in edges_res]
         return {"nodes": nodes, "edges": edges}
 
 
@@ -131,11 +142,11 @@ def layer_graph(repository_id: str, rel_types: list[str] | None = None) -> dict:
         edges_res = session.run(
             f"""
             MATCH (a {{repository_id: $rid}})-[r:{rel_pattern}]->(b {{repository_id: $rid}})
-            RETURN a.id AS source, b.id AS target, type(r) AS type
+            RETURN a.id AS source, b.id AS target, type(r) AS type, properties(r) AS props
             """,
             rid=repository_id,
         )
-        edges = [dict(record) for record in edges_res]
+        edges = [_edge_dict(record) for record in edges_res]
         node_ids = {e["source"] for e in edges} | {e["target"] for e in edges}
         nodes: list[dict] = []
         if node_ids:
