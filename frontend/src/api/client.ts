@@ -14,7 +14,7 @@ export interface AnalysisResponse {
 }
 export interface Repo { id: string; url: string | null; ref: string; languages: string[]; created_at: string | null }
 export interface GraphNode { id: string; name?: string; kind?: string; [k: string]: unknown }
-export interface GraphEdge { source: string; target: string; type: string }
+export interface GraphEdge { source: string; target: string; type: string; method?: string; route?: string; label?: string }
 export interface Simulation { file_path: string; confidence_score: number; safety_passed: boolean; blocked: boolean; diff: string }
 export interface Rule { id?: string; statement: string; confidence: number; verified?: boolean; hitl_question?: string }
 export interface Priority { file_path: string; score: number; [k: string]: unknown }
