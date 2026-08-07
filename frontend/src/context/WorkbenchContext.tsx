@@ -7,8 +7,9 @@ export type PanelTab = "problems" | "output" | "terminal" | "runs";
 
 export interface OpenEditor {
   repoId: string;
-  path: string; // repo-relative
+  path: string; // repo-relative, or a synthetic key like "::arch-map"
   name: string;
+  kind?: "file" | "graph";
 }
 
 interface WorkbenchCtx {

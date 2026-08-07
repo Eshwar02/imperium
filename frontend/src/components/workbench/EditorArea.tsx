@@ -5,6 +5,7 @@ import { api } from "../../api/client";
 import { useWorkbench } from "../../context/WorkbenchContext";
 import { fileIcon, monacoLanguage } from "../../lib/fileIcons";
 import { t } from "../../theme";
+import ArchitectureMap from "./ArchitectureMap";
 
 export default function EditorArea() {
   const { editors, activePath, setActivePath, closeFile } = useWorkbench();
@@ -14,7 +15,7 @@ export default function EditorArea() {
   const active = editors.find((e) => e.path === activePath) ?? null;
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || active.kind === "graph") return;
     if (cache[active.path] && !cache[active.path].loading) return;
     setCache((c) => ({ ...c, [active.path]: { content: "", binary: false, loading: true } }));
     api.fileContent(active.repoId, active.path)
@@ -36,7 +37,7 @@ export default function EditorArea() {
                 cursor: "pointer", whiteSpace: "nowrap", fontFamily: t.sans,
                 background: sel ? t.bg : "transparent", color: sel ? t.text : t.textDim,
                 borderRight: `1px solid ${t.border}`, borderTop: sel ? `1px solid ${t.accent}` : "1px solid transparent" }}>
-              <span>{fileIcon(e.name)}</span>
+              <span>{e.kind === "graph" ? "◈" : fileIcon(e.name)}</span>
               <span>{e.name}</span>
               <span onClick={(ev) => { ev.stopPropagation(); closeFile(e.path); }}
                 style={{ marginLeft: 4, color: t.textDim, fontSize: 14, lineHeight: 1 }}
@@ -48,7 +49,7 @@ export default function EditorArea() {
       </div>
 
       {/* breadcrumb */}
-      {active && (
+      {active && active.kind !== "graph" && (
         <div style={{ padding: "3px 14px", fontSize: 11, color: t.textDim, fontFamily: t.mono,
           borderBottom: `1px solid ${t.border}`, background: t.bg }}>{active.path}</div>
       )}
@@ -56,7 +57,8 @@ export default function EditorArea() {
       {/* body */}
       <div style={{ flex: 1, minHeight: 0 }}>
         {!active && <Welcome />}
-        {active && (() => {
+        {active && active.kind === "graph" && <ArchitectureMap repoId={active.repoId} />}
+        {active && active.kind !== "graph" && (() => {
           const st = cache[active.path];
           if (!st || st.loading) return <Center>Loading {active.name}…</Center>;
           if (st.error) return <Center color={t.red}>Failed to open: {st.error}</Center>;

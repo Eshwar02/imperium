@@ -102,7 +102,8 @@ export const api = {
 
   analysis: (id: string) => get<AnalysisResponse>(`/api/analysis/${id}`),
   runAnalysis: (id: string) => post<AnalysisResponse>(`/api/analysis/${id}`, {}),
-  graph: (id: string) => get<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/api/graph/${id}`),
+  graph: (id: string, layer = "all") =>
+    get<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/api/graph/${id}?layer=${layer}`),
   blast: (id: string, nodeId: string) => get<{ nodes: GraphNode[] }>(`/api/graph/${id}/blast/${nodeId}`),
   hierarchy: (id: string) => get<Record<string, unknown>>(`/api/hierarchy/${id}`),
   businessRules: (id: string) => get<{ rules?: Rule[]; business_rules?: Rule[] }>(`/api/business-rules/${id}`),
