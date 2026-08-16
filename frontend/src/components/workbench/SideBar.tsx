@@ -29,8 +29,8 @@ const header: React.CSSProperties = {
 export default function SideBar() {
   const { view } = useWorkbench();
   return (
-    <div style={{ width: 300, background: t.bgPanel, borderRight: `1px solid ${t.border}`,
-      display: "flex", flexDirection: "column", minHeight: 0, flexShrink: 0 }}>
+    <div style={{ width: "100%", height: "100%", background: t.bgPanel,
+      display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
       {view === "projects" && <ProjectsPanel />}
       {view === "explorer" && <Explorer />}
       {view === "search" && <SearchView />}

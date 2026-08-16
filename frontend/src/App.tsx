@@ -12,13 +12,18 @@ import ActivityBar from "./components/workbench/ActivityBar";
 import SideBar from "./components/workbench/SideBar";
 import EditorArea from "./components/workbench/EditorArea";
 import Panel from "./components/workbench/Panel";
+import Resizer from "./components/workbench/Resizer";
 import StatusBar from "./components/workbench/StatusBar";
 import ChatPanel from "./components/panels/ChatPanel";
+import { useResizable } from "./hooks";
 
 export default function App() {
   const wb = useWorkbench();
   const { sidebarOpen, panelOpen, chatOpen, togglePanel, toggleSidebar, toggleChat } = wb;
   const [palette, setPalette] = useState<null | "cmd" | "file">(null);
+  const [sidebarW, setSidebarW] = useResizable("sidebar", 300, 180, 560);
+  const [chatW, setChatW] = useResizable("chat", 340, 240, 640);
+  const [panelH, setPanelH] = useResizable("panel", 240, 120, 480);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -40,17 +45,32 @@ export default function App() {
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <ActivityBar />
-        {sidebarOpen && <SideBar />}
+        {sidebarOpen && (
+          <>
+            <div style={{ width: sidebarW, flexShrink: 0, minWidth: 0, borderRight: `1px solid ${t.border}` }}>
+              <SideBar />
+            </div>
+            <Resizer axis="x" size={sidebarW} min={180} max={560} onChange={setSidebarW} />
+          </>
+        )}
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, minHeight: 0 }}><EditorArea /></div>
-          {panelOpen && <div style={{ height: 240, flexShrink: 0 }}><Panel /></div>}
+          {panelOpen && (
+            <>
+              <Resizer axis="y" invert size={panelH} min={120} max={480} onChange={setPanelH} />
+              <div style={{ height: panelH, flexShrink: 0 }}><Panel /></div>
+            </>
+          )}
         </div>
 
         {chatOpen && (
-          <div style={{ width: 340, flexShrink: 0, borderLeft: `1px solid ${t.border}`, minHeight: 0 }}>
-            <ChatPanel />
-          </div>
+          <>
+            <Resizer axis="x" invert size={chatW} min={240} max={640} onChange={setChatW} />
+            <div style={{ width: chatW, flexShrink: 0, borderLeft: `1px solid ${t.border}`, minHeight: 0 }}>
+              <ChatPanel />
+            </div>
+          </>
         )}
       </div>
 
