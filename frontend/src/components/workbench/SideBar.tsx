@@ -152,16 +152,25 @@ function Section({ title, defaultOpen, children }: { title: string; defaultOpen?
 function MapLauncher() {
   const { openFile } = useWorkbench();
   const { activeId } = useRepo();
+  const btn: React.CSSProperties = {
+    flex: 1, background: t.bgElev, color: t.text, border: `1px solid ${t.border}`,
+    borderRadius: 6, padding: "8px 10px", fontSize: 12, fontFamily: t.sans,
+    cursor: activeId ? "pointer" : "default", textAlign: "left",
+  };
   return (
-    <div style={{ padding: "8px 12px", borderBottom: `1px solid ${t.border}` }}>
+    <div style={{ padding: "8px 12px", borderBottom: `1px solid ${t.border}`, display: "flex", gap: 6 }}>
       <button
         disabled={!activeId}
-        onClick={() => activeId && openFile({ repoId: activeId, path: "::arch-map", name: "Architecture Map", kind: "graph" })}
-        style={{ width: "100%", background: t.bgElev, color: t.text, border: `1px solid ${t.border}`,
-          borderRadius: 6, padding: "8px 10px", fontSize: 12, fontFamily: t.sans, cursor: activeId ? "pointer" : "default", textAlign: "left" }}
-      >
-        ◈ Open Architecture Map ⬲
-      </button>
+        onClick={() => activeId && openFile({ repoId: activeId, path: "::module-map", name: "Module Map", kind: "module-map" })}
+        style={btn}
+        title="Pages / components and how they connect"
+      >▧ Module Map</button>
+      <button
+        disabled={!activeId}
+        onClick={() => activeId && openFile({ repoId: activeId, path: "::api-map", name: "API Map", kind: "api-map" })}
+        style={btn}
+        title="Endpoint call arrows"
+      >◈ API Map</button>
     </div>
   );
 }
