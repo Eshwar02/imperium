@@ -3,13 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { PanelShell, Empty, Badge, Btn, Row } from "../ui";
 import { useRepo } from "../../context/RepoContext";
 import { api, type Category, type GateDecision } from "../../api/client";
+import { formatEvent } from "../../lib/agentGraph";
 import { t } from "../../theme";
 
 const CATEGORIES: Category[] = ["security", "performance", "modernization", "integration", "documentation"];
-
-function fmt(e: Record<string, unknown>): string {
-  try { return JSON.stringify(e); } catch { return String(e); }
-}
 function statusColor(s: string): string {
   const v = s.toLowerCase();
   if (v.includes("complete") || v.includes("success") || v.includes("done")) return t.green;
@@ -84,7 +81,7 @@ export default function RunEventsPanel() {
           >
             {events.length === 0 && <span style={{ color: t.textDim }}>Waiting for events…</span>}
             {events.map((e, i) => (
-              <div key={i} style={{ borderBottom: `1px solid ${t.border}33`, padding: "2px 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{fmt(e)}</div>
+              <div key={i} style={{ borderBottom: `1px solid ${t.border}33`, padding: "2px 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{formatEvent(e)}</div>
             ))}
           </div>
           <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 8, flexShrink: 0 }}>

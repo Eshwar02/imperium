@@ -76,7 +76,7 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
   mode: "cmd" | "file"; onClose: () => void;
   onToggleSidebar: () => void; onTogglePanel: () => void; onToggleChat: () => void;
 }) {
-  const { activeId, setRunId } = useRepo();
+  const { activeId, runId, setRunId } = useRepo();
   const { setView, openFile } = useWorkbench();
   const [q, setQ] = useState(mode === "cmd" ? ">" : "");
   const [files, setFiles] = useState<FileNode[]>([]);
@@ -90,6 +90,7 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
 
   const commands = useMemo(() => [
     { label: "▶ Start Pipeline Run", run: async () => { if (activeId) { const r = await api.startRun(activeId); setRunId(r.run_id); setView("run"); } } },
+    { label: "View: Agent Graph (live run)", run: () => { if (activeId && runId) openFile({ repoId: activeId, path: "::agent-graph", name: "Agent Graph", kind: "agent-graph" }); else setView("run"); } },
     { label: "View: Explorer", run: () => setView("explorer") },
     { label: "View: Search", run: () => setView("search") },
     { label: "View: Source Control", run: () => setView("scm") },
@@ -98,7 +99,7 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
     { label: "Toggle Primary Sidebar", run: onToggleSidebar },
     { label: "Toggle Panel", run: onTogglePanel },
     { label: "Toggle Chat", run: onToggleChat },
-  ], [activeId, openFile]);
+  ], [activeId, runId, openFile]);
 
   const term = q.replace(/^>/, "").trim().toLowerCase();
   const cmdResults = commands.filter((c) => c.label.toLowerCase().includes(term));

@@ -7,8 +7,10 @@ import { fileIcon } from "../../lib/fileIcons";
 import { t } from "../../theme";
 import { Btn } from "../ui";
 import Explorer from "./Explorer";
+import { AgentGraphMini } from "./AgentGraph";
 
 import FindingsPanel from "../panels/FindingsPanel";
+import RunEventsPanel from "../panels/RunEventsPanel";
 import BusinessRulesPanel from "../panels/BusinessRulesPanel";
 import TimelinePanel from "../panels/TimelinePanel";
 import DecisionLogPanel from "../panels/DecisionLogPanel";
@@ -101,6 +103,7 @@ function SearchView() {
 function RunView() {
   const { activeId } = useRepo();
   const { runId, setRunId } = useRepo();
+  const { openFile } = useWorkbench();
   const start = async () => {
     if (!activeId) return;
     const r = await api.startRun(activeId);
@@ -109,13 +112,21 @@ function RunView() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={header}>Run &amp; Pipeline</div>
-      <div style={{ padding: "0 12px 10px", display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ padding: "0 12px 10px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <Btn kind="green" onClick={start} disabled={!activeId}>▶ Start Run</Btn>
+        <button
+          disabled={!runId}
+          onClick={() => runId && activeId && openFile({ repoId: activeId, path: "::agent-graph", name: "Agent Graph", kind: "agent-graph" })}
+          style={{ background: t.bgElev, color: runId ? t.text : t.textDim, border: `1px solid ${t.border}`,
+            borderRadius: 6, padding: "5px 8px", fontSize: 11, fontFamily: t.sans, cursor: runId ? "pointer" : "default" }}
+        >⧉ Open Agent Graph</button>
         {runId && <span style={{ fontSize: 11, color: t.textDim, fontFamily: t.mono }}>run {runId.slice(0, 8)}</span>}
       </div>
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <div style={{ flex: 1, minHeight: 0, borderTop: `1px solid ${t.border}` }}><PrioritiesPanel /></div>
-        <div style={{ flex: 1, minHeight: 0, borderTop: `1px solid ${t.border}` }}><GateAPanel /></div>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "auto" }}>
+        <Section title="Agent Graph" defaultOpen><AgentGraphMini runId={runId} /></Section>
+        <Section title="Activity" defaultOpen><RunEventsPanel /></Section>
+        <Section title="Priorities"><PrioritiesPanel /></Section>
+        <Section title="Gate A"><GateAPanel /></Section>
       </div>
     </div>
   );
