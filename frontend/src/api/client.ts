@@ -23,6 +23,11 @@ export interface TimelineEvent { commit_sha: string; summary: string; author: st
 export interface Clarification { rule_id?: string; id?: string; statement?: string; hitl_question?: string; confidence?: number }
 export interface FileNode { name: string; path: string; type: "file" | "dir"; children?: FileNode[] }
 
+export type AgentNodeStatus = "idle" | "active" | "done" | "awaiting" | "failed";
+export interface AgentNode { id: string; label: string; type: "run" | "stage" | "gate" | "agent"; parent: string | null; status: AgentNodeStatus; detail?: string }
+export interface AgentEdge { source: string; target: string; kind: "contains" | "next" }
+export interface AgentGraphData { run_id: string; status: string; stage: string; nodes: AgentNode[]; edges: AgentEdge[] }
+
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -143,6 +148,7 @@ export const api = {
 
   startRun: (repository_id: string, repo_path = "") => post<{ run_id: string; status: string }>(`/api/runs`, { repository_id, repo_path }),
   getRun: (runId: string) => get<Record<string, unknown>>(`/api/runs/${runId}`),
+  runGraph: (runId: string) => get<AgentGraphData>(`/api/runs/${runId}/graph`),
   resumeRun: (runId: string, votes: Record<string, GateDecision>) => post(`/api/runs/${runId}/resume`, { votes }),
   deleteRun: (runId: string) => del(`/api/runs/${runId}`),
   runEvents: (runId: string, onEvent: (e: Record<string, unknown>) => void, signal?: AbortSignal) =>
