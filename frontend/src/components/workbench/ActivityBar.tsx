@@ -4,6 +4,7 @@ import { useWorkbench, type ActivityView } from "../../context/WorkbenchContext"
 import { t } from "../../theme";
 
 const ITEMS: { id: ActivityView; icon: string; label: string }[] = [
+  { id: "projects", icon: "🗂", label: "Projects" },
   { id: "explorer", icon: "🗎", label: "Explorer" },
   { id: "search", icon: "🔍", label: "Search" },
   { id: "scm", icon: "⑃", label: "Source Control" },

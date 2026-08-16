@@ -89,17 +89,21 @@ export default function TitleBar({ onPalette }: { onPalette: () => void }) {
           open={open === label} onOpen={(v) => setOpen(v ? label : null)} />
       ))}
 
-      <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 6 }}>
         <select value={activeId ?? ""} onChange={(e) => setActiveId(e.target.value)}
+          title="Switch project"
           style={{ background: t.bgElev, color: t.text, border: `1px solid ${t.border}`, borderRadius: 5,
             padding: "3px 10px", fontSize: 12, fontFamily: t.mono, maxWidth: 420, textAlign: "center" }}>
-          {repos.length === 0 && <option value="">no repositories</option>}
+          {repos.length === 0 && <option value="">no projects</option>}
           {repos.map((r) => (
             <option key={r.id} value={r.id}>
-              {(r.url?.split("/").pop() ?? r.id)} · {r.id.slice(0, 8)}
+              {(r.url?.replace(/\.git$/, "").split("/").pop() ?? r.id)} · {r.id.slice(0, 8)}
             </option>
           ))}
         </select>
+        <button onClick={() => setView("projects")} title="Add / manage projects"
+          style={{ background: t.bgElev, color: t.text, border: `1px solid ${t.border}`, borderRadius: 5,
+            padding: "3px 9px", fontSize: 13, cursor: "pointer", lineHeight: 1 }}>＋</button>
       </div>
 
       <div onClick={onPalette} title="Command Palette (Ctrl+Shift+P)"

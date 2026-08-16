@@ -19,6 +19,7 @@ import ClarificationsPanel from "../panels/ClarificationsPanel";
 import PrioritiesPanel from "../panels/PrioritiesPanel";
 import GateAPanel from "../panels/GateAPanel";
 import ChangeReviewPanel from "../panels/ChangeReviewPanel";
+import ProjectsPanel from "../panels/ProjectsPanel";
 
 const header: React.CSSProperties = {
   padding: "8px 12px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
@@ -30,6 +31,7 @@ export default function SideBar() {
   return (
     <div style={{ width: 300, background: t.bgPanel, borderRight: `1px solid ${t.border}`,
       display: "flex", flexDirection: "column", minHeight: 0, flexShrink: 0 }}>
+      {view === "projects" && <ProjectsPanel />}
       {view === "explorer" && <Explorer />}
       {view === "search" && <SearchView />}
       {view === "scm" && <SinglePanel title="Source Control"><ChangeReviewPanel /></SinglePanel>}
