@@ -2,14 +2,15 @@
 // which activity view is active, which editors are open, and what's visible.
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
-export type ActivityView = "explorer" | "search" | "scm" | "run" | "intel";
+export type ActivityView = "explorer" | "search" | "scm" | "run" | "intel" | "projects";
 export type PanelTab = "problems" | "output" | "terminal" | "runs";
 
 export interface OpenEditor {
   repoId: string;
-  path: string; // repo-relative, or a synthetic key like "::arch-map"
+  // repo-relative path, or a synthetic key like "::module-map" / "::api-map" / "::agent-graph"
+  path: string;
   name: string;
-  kind?: "file" | "graph";
+  kind?: "file" | "graph" | "module-map" | "api-map" | "agent-graph";
 }
 
 interface WorkbenchCtx {
