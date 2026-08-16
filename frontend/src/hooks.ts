@@ -1,5 +1,13 @@
 // Tiny async-data hook so every panel loads/refreshes uniformly.
 import { useCallback, useEffect, useState } from "react";
+import { loadSize, saveSize } from "./lib/layout";
+
+/** Persisted, clamped pixel size for a resizable region (localStorage-backed). */
+export function useResizable(key: string, initial: number, min: number, max: number) {
+  const [size, setSize] = useState(() => loadSize(key, initial, min, max));
+  useEffect(() => { saveSize(key, size); }, [key, size]);
+  return [size, setSize] as const;
+}
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
