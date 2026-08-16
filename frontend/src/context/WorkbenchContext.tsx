@@ -10,7 +10,7 @@ export interface OpenEditor {
   // repo-relative path, or a synthetic key like "::module-map" / "::api-map" / "::agent-graph"
   path: string;
   name: string;
-  kind?: "file" | "graph" | "module-map" | "api-map" | "agent-graph";
+  kind?: "file" | "module-map" | "api-map" | "agent-graph";
 }
 
 interface WorkbenchCtx {

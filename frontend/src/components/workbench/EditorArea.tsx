@@ -6,13 +6,13 @@ import { useWorkbench } from "../../context/WorkbenchContext";
 import { fileIcon, monacoLanguage } from "../../lib/fileIcons";
 import { t } from "../../theme";
 import { useRepo } from "../../context/RepoContext";
-import ArchitectureMap from "./ArchitectureMap";
+import GraphCanvas from "./GraphCanvas";
 import AgentGraph from "./AgentGraph";
 import type { OpenEditor } from "../../context/WorkbenchContext";
 
 /** Non-file editor kinds render a graph surface, not the Monaco text editor. */
 function isGraphKind(kind: OpenEditor["kind"]): boolean {
-  return kind === "graph" || kind === "module-map" || kind === "api-map" || kind === "agent-graph";
+  return kind === "module-map" || kind === "api-map" || kind === "agent-graph";
 }
 
 export default function EditorArea() {
@@ -66,7 +66,8 @@ export default function EditorArea() {
       {/* body */}
       <div style={{ flex: 1, minHeight: 0 }}>
         {!active && <Welcome />}
-        {active && active.kind === "graph" && <ArchitectureMap repoId={active.repoId} />}
+        {active && active.kind === "module-map" && <GraphCanvas repoId={active.repoId} layer="arch" />}
+        {active && active.kind === "api-map" && <GraphCanvas repoId={active.repoId} layer="api" />}
         {active && active.kind === "agent-graph" && <AgentGraph runId={runId} />}
         {active && !isGraphKind(active.kind) && (() => {
           const st = cache[active.path];
