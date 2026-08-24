@@ -5,6 +5,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { RepoProvider } from "./context/RepoContext";
 import { WorkbenchProvider } from "./context/WorkbenchContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { ContextMenuProvider } from "./context/ContextMenuContext";
 import RequireAuth from "./components/RequireAuth";
 import App from "./App";
 import Login from "./pages/Login";
@@ -21,7 +22,9 @@ const router = createBrowserRouter([
       <RequireAuth>
         <RepoProvider>
           <WorkbenchProvider>
-            <App />
+            <ContextMenuProvider>
+              <App />
+            </ContextMenuProvider>
           </WorkbenchProvider>
         </RepoProvider>
       </RequireAuth>
