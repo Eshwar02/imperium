@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type FileNode } from "../../api/client";
 import { useRepo } from "../../context/RepoContext";
 import { useWorkbench } from "../../context/WorkbenchContext";
+import { useContextMenu } from "../../context/ContextMenuContext";
 import { fileIcon } from "../../lib/fileIcons";
 import { t } from "../../theme";
 import { Btn } from "../ui";
@@ -32,11 +33,65 @@ export default function SideBar() {
     <div style={{ width: "100%", height: "100%", background: t.bgPanel,
       display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
       {view === "projects" && <ProjectsPanel />}
-      {view === "explorer" && <Explorer />}
+      {view === "explorer" && (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+          <OpenEditors />
+          <div style={{ flex: 1, minHeight: 0 }}><Explorer /></div>
+        </div>
+      )}
       {view === "search" && <SearchView />}
       {view === "scm" && <SinglePanel title="Source Control"><ChangeReviewPanel /></SinglePanel>}
       {view === "run" && <RunView />}
       {view === "intel" && <IntelView />}
+    </div>
+  );
+}
+
+// ---- Open Editors: the currently-open tabs, VS Code style --------------------
+function OpenEditors() {
+  const { editors, activePath, setActivePath, closeFile, closeAll } = useWorkbench();
+  const menu = useContextMenu();
+  const [open, setOpen] = useState(true);
+  if (editors.length === 0) return null;
+
+  return (
+    <div style={{ borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
+      <div onClick={() => setOpen((o) => !o)}
+        style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", cursor: "pointer",
+          fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: t.text }}>
+        <span style={{ fontSize: 9, color: t.textDim }}>{open ? "▼" : "▶"}</span>
+        Open Editors
+        <span style={{ color: t.textDim, fontWeight: 400 }}>{editors.length}</span>
+        <span style={{ flex: 1 }} />
+        <span title="Close All" onClick={(e) => { e.stopPropagation(); closeAll(); }}
+          style={{ color: t.textDim, fontSize: 13 }}>⊗</span>
+      </div>
+      {open && (
+        <div style={{ maxHeight: 160, overflow: "auto", paddingBottom: 4 }}>
+          {editors.map((e) => {
+            const sel = e.path === activePath;
+            return (
+              <div key={e.path} onClick={() => setActivePath(e.path)} title={e.path}
+                onContextMenu={(ev) => menu.open(ev, [
+                  { label: "Close", onClick: () => closeFile(e.path) },
+                  { label: "Close All", onClick: closeAll },
+                  { separator: true },
+                  { label: "Copy Path", onClick: () => navigator.clipboard?.writeText(e.path) },
+                ])}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 12px 3px 22px",
+                  fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden",
+                  color: sel ? t.text : t.textDim, background: sel ? t.bgHover : "transparent" }}
+                onMouseEnter={(ev) => { if (!sel) ev.currentTarget.style.background = "#ffffff08"; }}
+                onMouseLeave={(ev) => { if (!sel) ev.currentTarget.style.background = "transparent"; }}>
+                <span onClick={(ev) => { ev.stopPropagation(); closeFile(e.path); }}
+                  style={{ color: t.textDim, fontSize: 13, width: 12 }}>×</span>
+                <span>{fileIcon(e.name)}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
