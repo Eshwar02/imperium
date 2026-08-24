@@ -3,6 +3,7 @@ import Editor from "@monaco-editor/react";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useWorkbench } from "../../context/WorkbenchContext";
+import { useContextMenu } from "../../context/ContextMenuContext";
 import { fileIcon, monacoLanguage } from "../../lib/fileIcons";
 import { t } from "../../theme";
 import { useRepo } from "../../context/RepoContext";
@@ -16,8 +17,9 @@ function isGraphKind(kind: OpenEditor["kind"]): boolean {
 }
 
 export default function EditorArea() {
-  const { editors, activePath, setActivePath, closeFile } = useWorkbench();
+  const { editors, activePath, setActivePath, closeFile, closeOthers, closeAll } = useWorkbench();
   const { runId } = useRepo();
+  const menu = useContextMenu();
   // path -> { content, binary, loading, error }
   const [cache, setCache] = useState<Record<string, { content: string; binary: boolean; loading: boolean; error?: string }>>({});
 
@@ -40,8 +42,17 @@ export default function EditorArea() {
         overflowX: "auto", flexShrink: 0, minHeight: 35 }}>
         {editors.map((e) => {
           const sel = e.path === activePath;
+          const isFile = !isGraphKind(e.kind);
           return (
             <div key={e.path} onClick={() => setActivePath(e.path)} title={e.path}
+              onAuxClick={(ev) => { if (ev.button === 1) { ev.preventDefault(); closeFile(e.path); } }}
+              onContextMenu={(ev) => menu.open(ev, [
+                { label: "Close", hint: "Ctrl+W", onClick: () => closeFile(e.path) },
+                { label: "Close Others", disabled: editors.length < 2, onClick: () => closeOthers(e.path) },
+                { label: "Close All", onClick: closeAll },
+                { separator: true },
+                { label: "Copy Path", disabled: !isFile, onClick: () => navigator.clipboard?.writeText(e.path) },
+              ])}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", fontSize: 13,
                 cursor: "pointer", whiteSpace: "nowrap", fontFamily: t.sans,
                 background: sel ? t.bg : "transparent", color: sel ? t.text : t.textDim,

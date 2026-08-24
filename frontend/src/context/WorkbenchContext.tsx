@@ -32,6 +32,8 @@ interface WorkbenchCtx {
   activePath: string | null;
   openFile: (e: OpenEditor) => void;
   closeFile: (path: string) => void;
+  closeOthers: (path: string) => void;
+  closeAll: () => void;
   setActivePath: (path: string) => void;
 }
 
@@ -73,6 +75,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const closeOthers = useCallback((path: string) => {
+    setEditors((list) => list.filter((x) => x.path === path));
+    setActivePath(path);
+  }, []);
+
+  const closeAll = useCallback(() => {
+    setEditors([]);
+    setActivePath(null);
+  }, []);
+
   return (
     <Ctx.Provider
       value={{
@@ -81,7 +93,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         chatOpen, toggleChat: () => setChatOpen((o) => !o),
         panelOpen, togglePanel: () => setPanelOpen((o) => !o),
         panelTab, setPanelTab,
-        editors, activePath, openFile, closeFile, setActivePath,
+        editors, activePath, openFile, closeFile, closeOthers, closeAll, setActivePath,
       }}
     >
       {children}
