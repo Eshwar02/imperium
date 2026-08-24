@@ -34,7 +34,16 @@ async function authHeader(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 async function j<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    // Surface the backend's error detail (FastAPI puts it in `detail`) so the UI
+    // shows a real reason instead of a bare status code.
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body?.detail ?? "");
+    } catch { /* non-JSON body */ }
+    throw new Error(detail || `${res.status} ${res.statusText}`);
+  }
   return res.json() as Promise<T>;
 }
 async function get<T>(path: string): Promise<T> {

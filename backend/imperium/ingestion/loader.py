@@ -20,6 +20,11 @@ class LoadedRepo:
     url: str | None
     ref: str
     languages: list[str]
+    # Whether the Repository row was successfully written to Postgres. When False,
+    # the repo will not appear in the UI rail, so callers should surface an error
+    # rather than report a phantom success.
+    persisted: bool = False
+    persist_error: str | None = None
 
 
 def load_repository(repo_url: str | None, ref: str = "HEAD", owner_id: str | None = None) -> LoadedRepo:
@@ -54,6 +59,8 @@ def load_repository(repo_url: str | None, ref: str = "HEAD", owner_id: str | Non
         log.warning("Language detection failed: %s", exc)
 
     # Persist Repository row to Postgres (idempotent upsert)
+    persisted = False
+    persist_error: str | None = None
     try:
         from imperium.rkb.store import get_session, upsert_repository
 
@@ -62,8 +69,13 @@ def load_repository(repo_url: str | None, ref: str = "HEAD", owner_id: str | Non
             upsert_repository(session, repo_id, repo_url, ref, languages, owner_id=owner_id)
         finally:
             session.close()
+        persisted = True
         log.info("Persisted repository %s to RKB", repo_id)
     except Exception as exc:  # noqa: BLE001
+        persist_error = str(exc)
         log.warning("Could not persist repository row: %s", exc)
 
-    return LoadedRepo(id=repo_id, path=workspace, url=repo_url, ref=ref, languages=languages)
+    return LoadedRepo(
+        id=repo_id, path=workspace, url=repo_url, ref=ref, languages=languages,
+        persisted=persisted, persist_error=persist_error,
+    )

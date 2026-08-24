@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from imperium.api.auth import get_user_id
 from imperium.api.schemas import IngestRequest, IngestResponse
@@ -73,5 +73,18 @@ def ingest(req: IngestRequest, background_tasks: BackgroundTasks, request: Reque
     runs in the background so the response is immediate.
     """
     repo = load_repository(req.repo_url, ref=req.ref, owner_id=get_user_id(request))
+
+    # If the repository row could not be saved, the project would silently never
+    # appear in the UI rail. Surface the failure instead of faking success.
+    if not repo.persisted:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Could not save the project to the database"
+                + (f": {repo.persist_error}" if repo.persist_error else "")
+                + ". Check that the database is reachable and configured (POSTGRES_DSN)."
+            ),
+        )
+
     background_tasks.add_task(_build_kb, repo.id, repo.path)
     return IngestResponse(repository_id=repo.id, languages=repo.languages)
