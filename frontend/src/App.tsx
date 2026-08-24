@@ -107,6 +107,7 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
   }, [activeId]);
 
   const isCmd = q.startsWith(">");
+  const [sel, setSel] = useState(0);
 
   const commands = useMemo(() => [
     { label: "▶ Start Pipeline Run", run: async () => { if (activeId) { const r = await api.startRun(activeId); setRunId(r.run_id); setView("run"); } } },
@@ -116,20 +117,35 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
       label: `Project: Switch to ${(r.url?.replace(/\.git$/, "").split("/").pop() ?? r.id)}`,
       run: () => setActiveId(r.id),
     })),
-    { label: "View: Explorer", run: () => setView("explorer") },
-    { label: "View: Search", run: () => setView("search") },
+    { label: "View: Explorer", run: () => setView("explorer"), hint: "Ctrl+Shift+E" },
+    { label: "View: Search", run: () => setView("search"), hint: "Ctrl+Shift+F" },
     { label: "View: Source Control", run: () => setView("scm") },
     { label: "View: Imperium Intelligence", run: () => setView("intel") },
     { label: "View: Module Map", run: () => { if (activeId) openFile({ repoId: activeId, path: "::module-map", name: "Module Map", kind: "module-map" }); } },
     { label: "View: API Map", run: () => { if (activeId) openFile({ repoId: activeId, path: "::api-map", name: "API Map", kind: "api-map" }); } },
-    { label: "Toggle Primary Sidebar", run: onToggleSidebar },
-    { label: "Toggle Panel", run: onTogglePanel },
+    { label: "Toggle Primary Sidebar", run: onToggleSidebar, hint: "Ctrl+B" },
+    { label: "Toggle Panel", run: onTogglePanel, hint: "Ctrl+J" },
     { label: "Toggle Chat", run: onToggleChat },
-  ], [activeId, runId, repos, setActiveId, openFile]);
+  ] as { label: string; run: () => void; hint?: string }[], [activeId, runId, repos, setActiveId, openFile]);
 
   const term = q.replace(/^>/, "").trim().toLowerCase();
   const cmdResults = commands.filter((c) => c.label.toLowerCase().includes(term));
   const fileResults = files.filter((f) => f.path.toLowerCase().includes(term)).slice(0, 100);
+  const count = isCmd ? cmdResults.length : fileResults.length;
+
+  // Keep the highlight in range whenever the result set changes.
+  useEffect(() => { setSel(0); }, [q, count]);
+
+  const runAt = (i: number) => {
+    if (isCmd) { cmdResults[i]?.run(); onClose(); }
+    else { const f = fileResults[i]; if (f && activeId) openFile({ repoId: activeId, path: f.path, name: f.name }); onClose(); }
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, count - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); runAt(sel); }
+  };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#0007",
@@ -137,28 +153,28 @@ function CommandPalette({ mode, onClose, onToggleSidebar, onTogglePanel, onToggl
       <div onClick={(e) => e.stopPropagation()} style={{ width: 560, height: "fit-content", maxHeight: "70vh",
         background: t.bgElev, border: `1px solid ${t.border}`, borderRadius: 8, overflow: "hidden",
         boxShadow: "0 12px 48px #000b", display: "flex", flexDirection: "column" }}>
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown}
           placeholder={isCmd ? "Type a command…" : "Go to file…"}
           style={{ padding: "12px 14px", background: "transparent", border: "none",
             borderBottom: `1px solid ${t.border}`, color: t.text, fontSize: 14, outline: "none" }} />
         <div style={{ overflow: "auto" }}>
           {isCmd
             ? cmdResults.map((c, i) => (
-                <div key={i} onClick={() => { c.run(); onClose(); }} style={itemStyle}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = t.bgHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                  {c.label}
+                <div key={i} onClick={() => runAt(i)} onMouseEnter={() => setSel(i)}
+                  style={{ ...itemStyle, background: i === sel ? t.bgHover : "transparent",
+                    display: "flex", justifyContent: "space-between", gap: 16 }}>
+                  <span>{c.label}</span>
+                  {c.hint && <span style={{ color: t.textDim, fontSize: 11 }}>{c.hint}</span>}
                 </div>
               ))
-            : fileResults.map((f) => (
-                <div key={f.path} onClick={() => { if (activeId) openFile({ repoId: activeId, path: f.path, name: f.name }); onClose(); }}
-                  style={itemStyle}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = t.bgHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+            : fileResults.map((f, i) => (
+                <div key={f.path} onClick={() => runAt(i)} onMouseEnter={() => setSel(i)}
+                  style={{ ...itemStyle, background: i === sel ? t.bgHover : "transparent" }}>
                   <span style={{ marginRight: 8 }}>{fileIcon(f.name)}</span>{f.name}
                   <span style={{ color: t.textDim, marginLeft: 8, fontSize: 12 }}>{f.path}</span>
                 </div>
               ))}
+          {count === 0 && <div style={{ ...itemStyle, color: t.textDim, fontStyle: "italic" }}>No matching results</div>}
         </div>
       </div>
     </div>
