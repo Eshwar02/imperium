@@ -1,9 +1,19 @@
 // Activity bar — the vertical icon strip that switches the primary sidebar view.
 import { useAuth } from "../../context/AuthContext";
+import { useRepo } from "../../context/RepoContext";
 import { useWorkbench, type ActivityView } from "../../context/WorkbenchContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useContextMenu } from "../../context/ContextMenuContext";
+import Tooltip from "../ui/Tooltip";
 import { t } from "../../theme";
+
+// Small notification dot pinned to the corner of an activity icon.
+function Badge() {
+  return (
+    <span style={{ position: "absolute", top: 10, right: 8, width: 8, height: 8, borderRadius: "50%",
+      background: t.green, border: `1px solid #0a0d12` }} />
+  );
+}
 
 const ITEMS: { id: ActivityView; icon: string; label: string }[] = [
   { id: "projects", icon: "🗂", label: "Projects" },
@@ -17,6 +27,7 @@ const ITEMS: { id: ActivityView; icon: string; label: string }[] = [
 export default function ActivityBar() {
   const { view, setView, sidebarOpen, chatOpen, toggleChat } = useWorkbench();
   const { signOut } = useAuth();
+  const { runId } = useRepo();
   const { theme, setTheme } = useTheme();
   const menu = useContextMenu();
 
@@ -40,14 +51,23 @@ export default function ActivityBar() {
       alignItems: "center", borderRight: `1px solid ${t.border}`, flexShrink: 0,
     }}>
       {ITEMS.map((it) => (
-        <div key={it.id} title={it.label} onClick={() => setView(it.id)}
-          style={iconBtn(view === it.id && sidebarOpen)}>{it.icon}</div>
+        <Tooltip key={it.id} label={it.label} side="right">
+          <div onClick={() => setView(it.id)} style={iconBtn(view === it.id && sidebarOpen)}>
+            {it.icon}
+            {it.id === "run" && runId && <Badge />}
+          </div>
+        </Tooltip>
       ))}
       <div style={{ flex: 1 }} />
-      <div title="Toggle Chat" onClick={toggleChat} style={iconBtn(chatOpen)}>💬</div>
-      <div title="Sign out" onClick={signOut} style={iconBtn(false)}>⏻</div>
-      <div title="Manage (Settings)" onClick={openSettings} onContextMenu={openSettings}
-        style={iconBtn(false)}>⚙</div>
+      <Tooltip label="Toggle Chat" side="right">
+        <div onClick={toggleChat} style={iconBtn(chatOpen)}>💬</div>
+      </Tooltip>
+      <Tooltip label="Sign out" side="right">
+        <div onClick={signOut} style={iconBtn(false)}>⏻</div>
+      </Tooltip>
+      <Tooltip label="Manage (Settings)" side="right">
+        <div onClick={openSettings} onContextMenu={openSettings} style={iconBtn(false)}>⚙</div>
+      </Tooltip>
     </div>
   );
 }
