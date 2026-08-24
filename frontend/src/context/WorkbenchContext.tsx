@@ -25,6 +25,8 @@ interface WorkbenchCtx {
 
   panelOpen: boolean;
   togglePanel: () => void;
+  panelMaximized: boolean;
+  togglePanelMax: () => void;
   panelTab: PanelTab;
   setPanelTab: (t: PanelTab) => void;
 
@@ -44,6 +46,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [panelMaximized, setPanelMaximized] = useState(false);
   const [panelTab, setPanelTab] = useState<PanelTab>("problems");
   const [editors, setEditors] = useState<OpenEditor[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
@@ -91,7 +94,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         view, setView,
         sidebarOpen, toggleSidebar: () => setSidebarOpen((o) => !o),
         chatOpen, toggleChat: () => setChatOpen((o) => !o),
-        panelOpen, togglePanel: () => setPanelOpen((o) => !o),
+        panelOpen, togglePanel: () => setPanelOpen((o) => { const n = !o; if (!n) setPanelMaximized(false); return n; }),
+        panelMaximized, togglePanelMax: () => setPanelMaximized((m) => !m),
         panelTab, setPanelTab,
         editors, activePath, openFile, closeFile, closeOthers, closeAll, setActivePath,
       }}

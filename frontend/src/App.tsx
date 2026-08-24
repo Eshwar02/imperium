@@ -19,7 +19,7 @@ import { useResizable } from "./hooks";
 
 export default function App() {
   const wb = useWorkbench();
-  const { sidebarOpen, panelOpen, chatOpen, togglePanel, toggleSidebar, toggleChat } = wb;
+  const { sidebarOpen, panelOpen, panelMaximized, chatOpen, togglePanel, toggleSidebar, toggleChat } = wb;
   const [palette, setPalette] = useState<null | "cmd" | "file">(null);
   const [sidebarW, setSidebarW] = useResizable("sidebar", 300, 180, 560);
   const [chatW, setChatW] = useResizable("chat", 340, 240, 640);
@@ -55,11 +55,11 @@ export default function App() {
         )}
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: 1, minHeight: 0 }}><EditorArea /></div>
+          <div style={{ flex: 1, minHeight: 0, display: panelOpen && panelMaximized ? "none" : "block" }}><EditorArea /></div>
           {panelOpen && (
             <>
-              <Resizer axis="y" invert size={panelH} min={120} max={480} onChange={setPanelH} />
-              <div style={{ height: panelH, flexShrink: 0 }}><Panel /></div>
+              {!panelMaximized && <Resizer axis="y" invert size={panelH} min={120} max={480} onChange={setPanelH} />}
+              <div style={{ height: panelMaximized ? "100%" : panelH, flex: panelMaximized ? 1 : undefined, flexShrink: 0, minHeight: 0 }}><Panel /></div>
             </>
           )}
         </div>

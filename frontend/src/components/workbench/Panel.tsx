@@ -14,7 +14,7 @@ const TABS: { id: PanelTab; label: string }[] = [
 ];
 
 export default function Panel() {
-  const { panelTab, setPanelTab, togglePanel } = useWorkbench();
+  const { panelTab, setPanelTab, togglePanel, panelMaximized, togglePanelMax } = useWorkbench();
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0,
       background: t.bgPanel, borderTop: `1px solid ${t.border}` }}>
@@ -29,6 +29,8 @@ export default function Panel() {
           </button>
         ))}
         <div style={{ flex: 1 }} />
+        <div onClick={togglePanelMax} title={panelMaximized ? "Restore panel size" : "Maximize panel size"}
+          style={{ padding: "4px 8px", cursor: "pointer", color: t.textDim, fontSize: 13 }}>{panelMaximized ? "⤡" : "⤢"}</div>
         <div onClick={togglePanel} title="Close panel"
           style={{ padding: "4px 12px", cursor: "pointer", color: t.textDim, fontSize: 16 }}>×</div>
       </div>
