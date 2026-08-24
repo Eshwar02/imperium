@@ -70,11 +70,8 @@ export default function EditorArea() {
         })}
       </div>
 
-      {/* breadcrumb */}
-      {active && !isGraphKind(active.kind) && (
-        <div style={{ padding: "3px 14px", fontSize: 11, color: t.textDim, fontFamily: t.mono,
-          borderBottom: `1px solid ${t.border}`, background: t.bg }}>{active.path}</div>
-      )}
+      {/* breadcrumbs */}
+      {active && !isGraphKind(active.kind) && <Breadcrumbs path={active.path} name={active.name} />}
 
       {/* body */}
       <div style={{ flex: 1, minHeight: 0 }}>
@@ -105,6 +102,28 @@ export default function EditorArea() {
           );
         })()}
       </div>
+    </div>
+  );
+}
+
+// VS Code-style path breadcrumbs: clickable segments separated by chevrons.
+function Breadcrumbs({ path, name }: { path: string; name: string }) {
+  const segments = path.split("/").filter(Boolean);
+  return (
+    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2, padding: "3px 14px",
+      fontSize: 12, color: t.textDim, borderBottom: `1px solid ${t.border}`, background: t.bg }}>
+      {segments.map((seg, i) => {
+        const last = i === segments.length - 1;
+        return (
+          <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+            {i > 0 && <span style={{ color: t.border, margin: "0 2px" }}>›</span>}
+            <span style={{ color: last ? t.text : t.textDim, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {last && <span>{fileIcon(name)}</span>}
+              {seg}
+            </span>
+          </span>
+        );
+      })}
     </div>
   );
 }
