@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useWorkbench } from "../../context/WorkbenchContext";
 import { useContextMenu } from "../../context/ContextMenuContext";
+import { useTheme } from "../../context/ThemeContext";
 import { fileIcon, monacoLanguage } from "../../lib/fileIcons";
 import { t } from "../../theme";
 import { useRepo } from "../../context/RepoContext";
@@ -20,6 +21,7 @@ export default function EditorArea() {
   const { editors, activePath, setActivePath, closeFile, closeOthers, closeAll } = useWorkbench();
   const { runId } = useRepo();
   const menu = useContextMenu();
+  const { theme } = useTheme();
   // path -> { content, binary, loading, error }
   const [cache, setCache] = useState<Record<string, { content: string; binary: boolean; loading: boolean; error?: string }>>({});
 
@@ -89,7 +91,7 @@ export default function EditorArea() {
             <Editor
               key={active.path}
               height="100%"
-              theme="vs-dark"
+              theme={theme === "dark" ? "vs-dark" : "light"}
               path={active.path}
               defaultLanguage={monacoLanguage(active.name)}
               value={st.content}
